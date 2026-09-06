@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nailscape - Professional Booking System</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
   <style>
     body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -18,7 +18,12 @@
   <div id="root"></div>
   
   <script>
-    // ============ CONFIG — UPDATE THESE THREE BLOCKS ============
+    // Wait for Supabase to load
+    if (!window.supabase) {
+      document.body.innerHTML = '<div style="padding:20px; color:red;"><h2>Error: Supabase library failed to load</h2><p>Please refresh the page.</p></div>';
+      throw new Error('Supabase not loaded');
+    }
+
     const SUPABASE_URL = 'https://yoibrnqevcvzlwqdhite.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvaWJubmdldmN2emx3cWRoaXRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MTY0ODksImV4cCI6MjEwNDI5MjQ4OX0.M-AmLlXR46ciiO4SO0W0E829G6gslATDF9DJrSMdsUE';
     
@@ -89,26 +94,32 @@
         address: 'Herzogenaurach, Germany'
       };
 
-      // Check admin session on load
       useEffect(() => {
         const checkSession = async () => {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            setAdminLoggedIn(true);
-            setAdminEmail(session.user.email);
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+              setAdminLoggedIn(true);
+              setAdminEmail(session.user.email);
+            }
+          } catch (err) {
+            console.error('Session check failed:', err);
           }
         };
         checkSession();
       }, []);
 
-      // Load bookings on mount
       useEffect(() => {
         const loadBookings = async () => {
-          const { data, error } = await supabase
-            .from('bookings')
-            .select('*')
-            .order('booking_date', { ascending: false });
-          if (!error && data) setBookings(data);
+          try {
+            const { data, error } = await supabase
+              .from('bookings')
+              .select('*')
+              .order('booking_date', { ascending: false });
+            if (!error && data) setBookings(data);
+          } catch (err) {
+            console.error('Load bookings failed:', err);
+          }
         };
         loadBookings();
       }, []);
@@ -260,26 +271,30 @@
           if (error) throw error;
 
           // Send email via EmailJS
-          await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              service_id: EMAILJS_SERVICE_ID,
-              template_id: EMAILJS_TEMPLATE_CONFIRM,
-              user_id: EMAILJS_PUBLIC_KEY,
-              template_params: {
-                to_email: bookingForm.customerEmail,
-                customer_name: bookingForm.customerName,
-                booking_code: pendingCode,
-                booking_date: new Date(bookingForm.bookingDate).toLocaleDateString('de-DE'),
-                booking_time: bookingForm.bookingTime,
-                services: bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', '),
-                duration: calculateTotalDuration(),
-                total_price: calculateTotalPrice() + '€',
-                manage_url: window.location.href
-              }
-            })
-          });
+          try {
+            await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                service_id: EMAILJS_SERVICE_ID,
+                template_id: EMAILJS_TEMPLATE_CONFIRM,
+                user_id: EMAILJS_PUBLIC_KEY,
+                template_params: {
+                  to_email: bookingForm.customerEmail,
+                  customer_name: bookingForm.customerName,
+                  booking_code: pendingCode,
+                  booking_date: new Date(bookingForm.bookingDate).toLocaleDateString('de-DE'),
+                  booking_time: bookingForm.bookingTime,
+                  services: bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', '),
+                  duration: calculateTotalDuration(),
+                  total_price: calculateTotalPrice() + '€',
+                  manage_url: window.location.href
+                }
+              })
+            });
+          } catch (emailErr) {
+            console.error('Email send failed:', emailErr);
+          }
 
           setBookings([...bookings, data[0]]);
           setShowConfirmModal(false);
@@ -299,6 +314,7 @@
           setTimeout(() => setSuccessMessage(''), 8000);
         } catch (err) {
           setErrorMessage('Booking failed: ' + err.message);
+          console.error('Booking error:', err);
         } finally {
           setLoading(false);
         }
@@ -321,6 +337,7 @@
           setShowPassword(false);
         } catch (err) {
           setErrorMessage(err.message);
+          console.error('Login error:', err);
         } finally {
           setLoading(false);
         }
@@ -352,24 +369,27 @@
 
           if (error) throw error;
 
-          // Send reschedule email
-          await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              service_id: EMAILJS_SERVICE_ID,
-              template_id: EMAILJS_TEMPLATE_RESCHEDULE,
-              user_id: EMAILJS_PUBLIC_KEY,
-              template_params: {
-                to_email: booking.customer_email,
-                customer_name: booking.customer_name,
-                booking_code: booking.code,
-                old_datetime: oldDateTime,
-                new_datetime: newDateTimeStr,
-                services: booking.services.map(s => services.find(svc => svc.id === s)?.name).join(', ')
-              }
-            })
-          });
+          try {
+            await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                service_id: EMAILJS_SERVICE_ID,
+                template_id: EMAILJS_TEMPLATE_RESCHEDULE,
+                user_id: EMAILJS_PUBLIC_KEY,
+                template_params: {
+                  to_email: booking.customer_email,
+                  customer_name: booking.customer_name,
+                  booking_code: booking.code,
+                  old_datetime: oldDateTime,
+                  new_datetime: newDateTimeStr,
+                  services: booking.services.map(s => services.find(svc => svc.id === s)?.name).join(', ')
+                }
+              })
+            });
+          } catch (emailErr) {
+            console.error('Reschedule email failed:', emailErr);
+          }
 
           const updatedBooking = { ...booking, booking_date: newDateTime.date, booking_time: newDateTime.time };
           setBookings(prev => prev.map(b => b.id === bookingId ? updatedBooking : b));
@@ -381,6 +401,7 @@
           setTimeout(() => setSuccessMessage(''), 5000);
         } catch (err) {
           setErrorMessage('Reschedule failed: ' + err.message);
+          console.error('Reschedule error:', err);
         } finally {
           setLoading(false);
         }
@@ -723,8 +744,8 @@
                         )
                       ) : e('div', { className: 'flex gap-2 pt-2 flex-wrap mt-2' },
                         e('button', { onClick: () => setEditingDateTime(booking.id), className: 'px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600' }, 'Reschedule'),
-                        e('button', { onClick: async () => { await supabase.from('bookings').update({ status: booking.status === 'confirmed' ? 'completed' : 'confirmed' }).eq('id', booking.id); setBookings(prev => prev.map(b => b.id === booking.id ? {...b, status: booking.status === 'confirmed' ? 'completed' : 'confirmed'} : b)); }, className: 'px-3 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600' }, 'Complete'),
-                        canCancelBooking(booking.booking_date, booking.booking_time) && e('button', { onClick: async () => { await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', booking.id); setBookings(prev => prev.map(b => b.id === booking.id ? {...b, status: 'cancelled'} : b)); }, className: 'px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600' }, 'Cancel'),
+                        e('button', { onClick: async () => { try { await supabase.from('bookings').update({ status: booking.status === 'confirmed' ? 'completed' : 'confirmed' }).eq('id', booking.id); setBookings(prev => prev.map(b => b.id === booking.id ? {...b, status: booking.status === 'confirmed' ? 'completed' : 'confirmed'} : b)); } catch(err) { console.error(err); } }, className: 'px-3 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600' }, 'Complete'),
+                        canCancelBooking(booking.booking_date, booking.booking_time) && e('button', { onClick: async () => { try { await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', booking.id); setBookings(prev => prev.map(b => b.id === booking.id ? {...b, status: 'cancelled'} : b)); } catch(err) { console.error(err); } }, className: 'px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600' }, 'Cancel'),
                         e('a', { href: `mailto:${booking.customer_email}`, className: 'px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600' }, 'Email'),
                         e('a', { href: `https://wa.me/${booking.customer_phone.replace(/[^0-9]/g, '')}`, target: '_blank', className: 'px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700' }, 'WhatsApp')
                       ),
@@ -743,8 +764,13 @@
       if (currentPage === 'admin') return renderAdminPage();
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(NailscapeApp));
+    try {
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(React.createElement(NailscapeApp));
+    } catch (err) {
+      console.error('Failed to render app:', err);
+      document.body.innerHTML = '<div style="padding:20px; color:red;"><h2>Error: Failed to load app</h2><p>' + err.message + '</p></div>';
+    }
   </script>
 </body>
 </html>
