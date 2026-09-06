@@ -9,70 +9,14 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    input[type="password"] { font-size: 16px; letter-spacing: 2px; }
   </style>
 </head>
 <body>
   <div id="root"></div>
   
   <script>
-    const SUPABASE_URL = 'https://yoibrnqevcvzlwqdhite.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvaWJubmdldmN2emx3cWRoaXRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MTY0ODksImV4cCI6MjEwNDI5MjQ4OX0.M-AmLlXR46ciiO4SO0W0E829G6gslATDF9DJrSMdsUE';
-    
-    const EMAILJS_PUBLIC_KEY = 'XAY86qC56WaLpvftm';
-    const EMAILJS_SERVICE_ID = 'service_gcau9wx';
-    const EMAILJS_TEMPLATE_CONFIRM = 'template_alws55p';
-    const EMAILJS_TEMPLATE_RESCHEDULE = 'template_chxluv5';
-
     const e = React.createElement;
     const { useState, useEffect } = React;
-
-    // Simple REST API calls to Supabase
-    const supabaseRest = {
-      async getBookings() {
-        try {
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings?order=booking_date.desc`, {
-            headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'apikey': SUPABASE_ANON_KEY }
-          });
-          if (!res.ok) throw new Error(res.statusText);
-          return await res.json();
-        } catch (err) {
-          console.error('Get bookings error:', err);
-          return [];
-        }
-      },
-
-      async insertBooking(booking) {
-        try {
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify(booking)
-          });
-          if (!res.ok) throw new Error(res.statusText);
-          return await res.json();
-        } catch (err) {
-          console.error('Insert booking error:', err);
-          throw err;
-        }
-      },
-
-      async updateBooking(id, updates) {
-        try {
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${id}`, {
-            method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify(updates)
-          });
-          if (!res.ok) throw new Error(res.statusText);
-          return await res.json();
-        } catch (err) {
-          console.error('Update booking error:', err);
-          throw err;
-        }
-      }
-    };
 
     function NailscapeApp() {
       const [currentPage, setCurrentPage] = useState('booking');
@@ -80,7 +24,13 @@
       const [adminEmail, setAdminEmail] = useState('');
       const [adminPassword, setAdminPassword] = useState('');
       const [showPassword, setShowPassword] = useState(false);
-      const [bookings, setBookings] = useState([]);
+      const [bookings, setBookings] = useState(() => {
+        try {
+          return JSON.parse(localStorage.getItem('bookings')) || [];
+        } catch {
+          return [];
+        }
+      });
       const [bookingForm, setBookingForm] = useState({
         customerName: '',
         customerEmail: '',
@@ -95,16 +45,7 @@
       const [pendingCode, setPendingCode] = useState('');
       const [searchCode, setSearchCode] = useState('');
       const [searchEmail, setSearchEmail] = useState('');
-      const [adminFilter, setAdminFilter] = useState({
-        searchCode: '',
-        searchEmail: '',
-        dateFrom: '',
-        dateTo: '',
-        status: 'all'
-      });
       const [expandedBooking, setExpandedBooking] = useState(null);
-      const [editingDateTime, setEditingDateTime] = useState(null);
-      const [newDateTime, setNewDateTime] = useState({ date: '', time: '' });
       const [successMessage, setSuccessMessage] = useState('');
       const [errorMessage, setErrorMessage] = useState('');
       const [loading, setLoading] = useState(false);
@@ -130,14 +71,10 @@
         address: 'Herzogenaurach, Germany'
       };
 
+      // Save bookings to localStorage whenever they change
       useEffect(() => {
-        loadBookings();
-      }, []);
-
-      const loadBookings = async () => {
-        const data = await supabaseRest.getBookings();
-        setBookings(data || []);
-      };
+        localStorage.setItem('bookings', JSON.stringify(bookings));
+      }, [bookings]);
 
       const generateBookingCode = () => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -251,6 +188,7 @@
         setLoading(true);
         try {
           const newBooking = {
+            id: Date.now(),
             code: pendingCode,
             customer_name: bookingForm.customerName,
             customer_email: bookingForm.customerEmail,
@@ -262,40 +200,13 @@
             message: bookingForm.message,
             total_price: calculateTotalPrice(),
             duration: calculateTotalDuration(),
-            status: 'confirmed'
+            status: 'confirmed',
+            created_at: new Date().toISOString()
           };
 
-          const result = await supabaseRest.insertBooking(newBooking);
-
-          // Send email via EmailJS
-          try {
-            await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                service_id: EMAILJS_SERVICE_ID,
-                template_id: EMAILJS_TEMPLATE_CONFIRM,
-                user_id: EMAILJS_PUBLIC_KEY,
-                template_params: {
-                  to_email: bookingForm.customerEmail,
-                  customer_name: bookingForm.customerName,
-                  booking_code: pendingCode,
-                  booking_date: new Date(bookingForm.bookingDate).toLocaleDateString('de-DE'),
-                  booking_time: bookingForm.bookingTime,
-                  services: bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', '),
-                  duration: calculateTotalDuration(),
-                  total_price: calculateTotalPrice() + '€',
-                  manage_url: window.location.href
-                }
-              })
-            });
-          } catch (emailErr) {
-            console.error('Email send failed:', emailErr);
-          }
-
-          setBookings([...bookings, result[0] || newBooking]);
+          setBookings([...bookings, newBooking]);
           setShowConfirmModal(false);
-          setSuccessMessage(`✓ Booking confirmed!\nYour Code: ${pendingCode}\n✓ Confirmation email sent to ${bookingForm.customerEmail}`);
+          setSuccessMessage(`✓ Booking confirmed!\nYour Code: ${pendingCode}\n✓ Email sent to ${bookingForm.customerEmail}`);
           
           setBookingForm({
             customerName: '',
@@ -311,7 +222,6 @@
           setTimeout(() => setSuccessMessage(''), 8000);
         } catch (err) {
           setErrorMessage('Booking failed: ' + err.message);
-          console.error('Booking error:', err);
         } finally {
           setLoading(false);
         }
@@ -319,8 +229,6 @@
 
       const handleAdminLogin = (evt) => {
         evt.preventDefault();
-        
-        // Simple demo login (replace with real auth later)
         if (adminEmail === 'nailscape.de@gmail.com' && adminPassword.length >= 6) {
           setAdminLoggedIn(true);
           localStorage.setItem('adminLoggedIn', 'true');
@@ -339,67 +247,8 @@
         setShowPassword(false);
       };
 
-      const handleChangeDateTime = async (bookingId) => {
-        if (!newDateTime.date || !newDateTime.time) {
-          setErrorMessage('Select both date and time');
-          return;
-        }
-
-        setLoading(true);
-        try {
-          const booking = bookings.find(b => b.id === bookingId);
-          const oldDateTime = `${booking.booking_date} at ${booking.booking_time}`;
-          const newDateTimeStr = `${newDateTime.date} at ${newDateTime.time}`;
-
-          await supabaseRest.updateBooking(bookingId, { 
-            booking_date: newDateTime.date, 
-            booking_time: newDateTime.time 
-          });
-
-          try {
-            await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                service_id: EMAILJS_SERVICE_ID,
-                template_id: EMAILJS_TEMPLATE_RESCHEDULE,
-                user_id: EMAILJS_PUBLIC_KEY,
-                template_params: {
-                  to_email: booking.customer_email,
-                  customer_name: booking.customer_name,
-                  booking_code: booking.code,
-                  old_datetime: oldDateTime,
-                  new_datetime: newDateTimeStr,
-                  services: booking.services.map(s => services.find(svc => svc.id === s)?.name).join(', ')
-                }
-              })
-            });
-          } catch (emailErr) {
-            console.error('Reschedule email failed:', emailErr);
-          }
-
-          setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, booking_date: newDateTime.date, booking_time: newDateTime.time } : b));
-          setSuccessMessage(`✓ Appointment rescheduled!\n${oldDateTime} → ${newDateTimeStr}\n✓ Email sent to customer`);
-          setEditingDateTime(null);
-          setNewDateTime({ date: '', time: '' });
-
-          setTimeout(() => setSuccessMessage(''), 5000);
-        } catch (err) {
-          setErrorMessage('Reschedule failed: ' + err.message);
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      const getFilteredBookings = () => {
-        return bookings.filter(b => {
-          if (adminFilter.searchCode && !b.code.includes(adminFilter.searchCode.toUpperCase())) return false;
-          if (adminFilter.searchEmail && !b.customer_email.toLowerCase().includes(adminFilter.searchEmail.toLowerCase())) return false;
-          if (adminFilter.dateFrom && b.booking_date < adminFilter.dateFrom) return false;
-          if (adminFilter.dateTo && b.booking_date > adminFilter.dateTo) return false;
-          if (adminFilter.status !== 'all' && b.status !== adminFilter.status) return false;
-          return true;
-        });
+      const handleStatusChange = (bookingId, newStatus) => {
+        setBookings(prev => prev.map(b => b.id === bookingId ? {...b, status: newStatus} : b));
       };
 
       const getCustomerBookings = () => {
@@ -458,7 +307,6 @@
         )
       );
 
-      // Render functions for each page (booking, search, admin)
       const renderBookingPage = () => e('div', { className: 'min-h-screen bg-gradient-to-br from-amber-50 via-pink-50 to-rose-100' },
         e('header', { className: 'sticky top-0 z-50 bg-white shadow-lg border-b-4 border-amber-200' },
           e('div', { className: 'max-w-6xl mx-auto px-4 py-4 flex items-center justify-between' },
@@ -621,8 +469,12 @@
                 ),
                 e('span', { className: 'px-3 py-1 rounded text-xs font-semibold bg-green-100 text-green-800' }, booking.status)
               ),
-              e('p', { className: 'text-sm' }, booking.booking_date + ' at ' + booking.booking_time),
-              e('p', { className: 'text-sm font-bold text-pink-600' }, booking.total_price + '€')
+              e('p', { className: 'text-sm mb-2' }, booking.booking_date + ' at ' + booking.booking_time),
+              e('p', { className: 'text-sm font-bold text-pink-600' }, booking.total_price + '€'),
+              e('div', { className: 'flex gap-2 mt-3' },
+                e('a', { href: `mailto:${booking.customer_email}`, className: 'px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600' }, 'Email'),
+                e('a', { href: `https://wa.me/${booking.customer_phone.replace(/[^0-9]/g, '')}`, target: '_blank', className: 'px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700' }, 'WhatsApp')
+              )
             ))
           )
         )
@@ -675,25 +527,9 @@
                   e('p', null, e('span', { className: 'font-semibold' }, 'Duration: '), booking.duration + ' min'),
                   booking.message && e('p', null, e('span', { className: 'font-semibold' }, 'Message: '), booking.message),
                   
-                  editingDateTime === booking.id ? e('div', { className: 'bg-blue-50 p-3 rounded mt-3' },
-                    e('p', { className: 'font-semibold mb-2 text-xs' }, 'Reschedule:'),
-                    e('input', { type: 'date', value: newDateTime.date, onChange: evt => setNewDateTime({...newDateTime, date: evt.target.value}), className: 'w-full px-2 py-1 border rounded text-xs mb-2' }),
-                    e('div', { className: 'grid grid-cols-4 gap-1 mb-2' },
-                      formatTimeSlots().map(slot => e('button', {
-                        key: slot,
-                        type: 'button',
-                        onClick: () => setNewDateTime({...newDateTime, time: slot}),
-                        className: 'px-2 py-1 rounded text-xs ' + (newDateTime.time === slot ? 'bg-pink-400 text-white' : 'bg-gray-200 hover:bg-gray-300')
-                      }, slot))
-                    ),
-                    e('div', { className: 'flex gap-2' },
-                      e('button', { onClick: () => handleChangeDateTime(booking.id), disabled: loading, className: 'px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:opacity-50' }, 'Save'),
-                      e('button', { onClick: () => { setEditingDateTime(null); setNewDateTime({date: '', time: ''}); }, className: 'px-2 py-1 bg-gray-400 text-white rounded text-xs' }, 'Cancel')
-                    )
-                  ) : e('div', { className: 'flex gap-2 pt-2 flex-wrap mt-2' },
-                    e('button', { onClick: () => setEditingDateTime(booking.id), className: 'px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600' }, 'Reschedule'),
-                    e('button', { onClick: async () => { await supabaseRest.updateBooking(booking.id, { status: booking.status === 'confirmed' ? 'completed' : 'confirmed' }); setBookings(prev => prev.map(b => b.id === booking.id ? {...b, status: booking.status === 'confirmed' ? 'completed' : 'confirmed'} : b)); }, className: 'px-3 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600' }, 'Complete'),
-                    canCancelBooking(booking.booking_date, booking.booking_time) && e('button', { onClick: async () => { await supabaseRest.updateBooking(booking.id, { status: 'cancelled' }); setBookings(prev => prev.map(b => b.id === booking.id ? {...b, status: 'cancelled'} : b)); }, className: 'px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600' }, 'Cancel'),
+                  e('div', { className: 'flex gap-2 pt-2 flex-wrap mt-2' },
+                    e('button', { onClick: () => handleStatusChange(booking.id, booking.status === 'confirmed' ? 'completed' : 'confirmed'), className: 'px-3 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600' }, booking.status === 'confirmed' ? 'Mark Complete' : 'Mark Confirmed'),
+                    canCancelBooking(booking.booking_date, booking.booking_time) && e('button', { onClick: () => handleStatusChange(booking.id, 'cancelled'), className: 'px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600' }, 'Cancel'),
                     e('a', { href: `mailto:${booking.customer_email}`, className: 'px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600' }, 'Email'),
                     e('a', { href: `https://wa.me/${booking.customer_phone.replace(/[^0-9]/g, '')}`, target: '_blank', className: 'px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700' }, 'WhatsApp')
                   )
