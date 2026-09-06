@@ -19,9 +19,8 @@
   
   <script>
     const e = React.createElement;
-    const { useState, useEffect } = React;
+    const { useState } = React;
 
-    // MAIN APP COMPONENT
     function NailscapeApp() {
       const [currentPage, setCurrentPage] = useState('booking');
       const [adminLoggedIn, setAdminLoggedIn] = useState(false);
@@ -29,7 +28,6 @@
       const [adminPassword, setAdminPassword] = useState('');
       const [showPassword, setShowPassword] = useState(false);
       const [adminPasswordHash, setAdminPasswordHash] = useState(localStorage.getItem('adminPasswordHash') || null);
-      const [sessionTimeout, setSessionTimeout] = useState(null);
       const [bookings, setBookings] = useState(JSON.parse(localStorage.getItem('bookings') || '[]'));
       const [bookingForm, setBookingForm] = useState({
         customerName: '',
@@ -52,11 +50,10 @@
       const [expandedBooking, setExpandedBooking] = useState(null);
       const [successMessage, setSuccessMessage] = useState('');
       const [errorMessage, setErrorMessage] = useState('');
-      const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
       const [showForgotPassword, setShowForgotPassword] = useState(false);
+      const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
       const [resetSent, setResetSent] = useState(false);
 
-      // SERVICES CONFIGURATION
       const services = [
         { id: 'gel-nails', name: 'Full Cover Gel Nails', price: 45, duration: 120, longService: true },
         { id: 'nail-repair', name: 'Nail Repair', price: 3, duration: 45, longService: false },
@@ -79,7 +76,6 @@
         address: 'Herzogenaurach, Germany'
       };
 
-      // UTILITY FUNCTIONS
       const hashPassword = (password) => {
         let hash = 0;
         for (let i = 0; i < password.length; i++) {
@@ -273,7 +269,6 @@
         setAdminLoggedIn(false);
         setAdminPassword('');
         setShowPassword(false);
-        setSessionTimeout(null);
       };
 
       const handleForgotPassword = () => {
@@ -308,7 +303,6 @@
         return hoursUntil > 24;
       };
 
-      // RENDER CONFIRMATION MODAL
       const renderConfirmModal = () => e('div', { className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50' },
         e('div', { className: 'bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4' },
           e('h2', { className: 'text-2xl font-bold text-amber-900 mb-6' }, 'Confirm Your Booking'),
@@ -345,12 +339,11 @@
         )
       );
 
-      // RENDER BOOKING PAGE
       const renderBookingPage = () => e('div', { className: 'min-h-screen bg-gradient-to-br from-amber-50 via-pink-50 to-rose-100' },
         e('header', { className: 'sticky top-0 z-50 bg-white shadow-lg border-b-4 border-amber-200' },
           e('div', { className: 'max-w-6xl mx-auto px-4 py-4 flex items-center justify-between' },
             e('div', { className: 'flex items-center gap-3' },
-              e('img', { src: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAA4ADgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZ3eHl6g4SFhoeIiYqSk5SVmJmaoqOkpaanqKmqsrO0tba2uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVmJmaoqOkpaanqKmqsrO0tba2uLm6wsPExcbHyMnK0tPU1fbW2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD/2Q==', alt: 'Logo', className: 'logo-img' }),
+              e('div', { className: 'w-12 h-12 bg-gradient-to-br from-amber-200 to-pink-200 rounded-full flex items-center justify-center font-bold text-lg text-amber-900' }, 'NS'),
               e('div', null,
                 e('h1', { className: 'text-2xl font-bold text-amber-900' }, 'Nailscape'),
                 e('p', { className: 'text-xs text-pink-600' }, 'Nails & Brows')
@@ -480,40 +473,39 @@
         showConfirmModal && renderConfirmModal()
       );
 
-      // RENDER ADMIN PAGE
       const renderAdminPage = () => e('div', { className: 'min-h-screen bg-gray-100' },
         e('header', { className: 'bg-white shadow-lg border-b-4 border-pink-400' },
           e('div', { className: 'max-w-7xl mx-auto px-4 py-4 flex items-center justify-between' },
             e('h1', { className: 'text-2xl font-bold text-amber-900' }, 'Nailscape Admin'),
             e('div', { className: 'space-x-2' },
-              !adminLoggedIn && e('button', { onClick: () => setCurrentPage('booking'), className: 'px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400' }, 'Back to Booking'),
+              !adminLoggedIn && e('button', { onClick: () => setCurrentPage('booking'), className: 'px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400' }, 'Back'),
               adminLoggedIn && e('button', { onClick: handleLogout, className: 'px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600' }, 'Logout')
             )
           )
         ),
 
         !adminLoggedIn ? e('div', { className: 'max-w-md mx-auto mt-10 bg-white p-8 rounded-lg shadow-lg' },
-          e('h2', { className: 'text-2xl font-bold text-amber-900 mb-6' }, adminPasswordHash ? 'Admin Login' : 'Set Admin Password'),
-          
           showForgotPassword ? e('div', { className: 'space-y-4' },
             resetSent ? e('div', { className: 'text-center' },
-              e('p', { className: 'text-green-600 font-semibold mb-3' }, '✓ Password Reset Email Sent!'),
-              e('p', { className: 'text-sm text-gray-600 mb-4' }, 'Check your email: nailscape.de@gmail.com'),
-              e('p', { className: 'text-xs text-gray-500' }, 'Redirecting to login...')
-            ) : e('form', { onSubmit: (evt) => { evt.preventDefault(); handleForgotPassword(); } }, className: 'space-y-4',
-              e('input', { type: 'email', value: forgotPasswordEmail, onChange: evt => setForgotPasswordEmail(evt.target.value), placeholder: 'Enter your email', className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg', required: true }),
-              e('button', { type: 'submit', className: 'w-full bg-blue-500 text-white font-bold py-2 rounded hover:bg-blue-600' }, 'Send Reset Email'),
-              e('button', { type: 'button', onClick: () => setShowForgotPassword(false), className: 'w-full bg-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-400' }, 'Back')
+              e('p', { className: 'text-green-600 font-semibold mb-3' }, '✓ Password Reset Sent!'),
+              e('p', { className: 'text-sm text-gray-600' }, 'Check email: nailscape.de@gmail.com')
+            ) : e('form', { onSubmit: (evt) => { evt.preventDefault(); handleForgotPassword(); }, className: 'space-y-4' },
+              e('input', { type: 'email', value: forgotPasswordEmail, onChange: evt => setForgotPasswordEmail(evt.target.value), placeholder: 'Email', className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg', required: true }),
+              e('button', { type: 'submit', className: 'w-full bg-blue-500 text-white font-bold py-2 rounded hover:bg-blue-600' }, 'Send Reset Link'),
+              e('button', { type: 'button', onClick: () => setShowForgotPassword(false), className: 'w-full bg-gray-300 text-gray-800 font-bold py-2 rounded' }, 'Back')
             )
-          ) : e('form', { onSubmit: handleAdminLogin, className: 'space-y-4' },
-            e('input', { type: 'email', value: adminEmail, readOnly: true, className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg bg-gray-100', required: true }),
-            e('div', { className: 'relative' },
-              e('input', { type: showPassword ? 'text' : 'password', placeholder: 'Password', value: adminPassword, onChange: evt => setAdminPassword(evt.target.value), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg pr-10', required: true }),
-              e('button', { type: 'button', onClick: () => setShowPassword(!showPassword), className: 'absolute right-3 top-2 text-gray-600 text-sm font-bold' }, showPassword ? '👁️' : '🔒')
-            ),
-            errorMessage && e('div', { className: 'text-red-600 text-sm' }, errorMessage),
-            e('button', { type: 'submit', className: 'w-full bg-pink-400 text-white font-bold py-2 rounded hover:bg-pink-500' }, 'Login'),
-            adminPasswordHash && e('button', { type: 'button', onClick: () => { setShowForgotPassword(true); setErrorMessage(''); }, className: 'w-full text-blue-600 text-sm hover:underline' }, 'Forgot Password?')
+          ) : e('div', { className: 'space-y-4' },
+            e('h2', { className: 'text-2xl font-bold text-amber-900 mb-6' }, adminPasswordHash ? 'Admin Login' : 'Set Password'),
+            e('form', { onSubmit: handleAdminLogin, className: 'space-y-4' },
+              e('input', { type: 'email', value: adminEmail, readOnly: true, className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg bg-gray-100', required: true }),
+              e('div', { className: 'relative' },
+                e('input', { type: showPassword ? 'text' : 'password', placeholder: 'Password', value: adminPassword, onChange: evt => setAdminPassword(evt.target.value), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg pr-10', required: true }),
+                e('button', { type: 'button', onClick: () => setShowPassword(!showPassword), className: 'absolute right-3 top-2 text-gray-600 font-bold' }, showPassword ? '👁️' : '🔒')
+              ),
+              errorMessage && e('div', { className: 'text-red-600 text-sm font-semibold' }, errorMessage),
+              e('button', { type: 'submit', className: 'w-full bg-pink-400 text-white font-bold py-2 rounded hover:bg-pink-500' }, 'Login'),
+              adminPasswordHash && e('button', { type: 'button', onClick: () => { setShowForgotPassword(true); setErrorMessage(''); }, className: 'w-full text-blue-600 text-sm hover:underline font-semibold' }, 'Forgot Password?')
+            )
           )
         ) : e('div', { className: 'max-w-7xl mx-auto p-4' },
           e('div', { className: 'grid md:grid-cols-3 gap-6' },
@@ -521,8 +513,8 @@
               e('div', { className: 'bg-white rounded-lg shadow p-4' },
                 e('h3', { className: 'font-bold text-lg text-amber-900 mb-4' }, 'Filters'),
                 e('div', { className: 'space-y-3' },
-                  e('input', { type: 'date', value: adminFilter.dateFrom, onChange: evt => setAdminFilter({...adminFilter, dateFrom: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm', placeholder: 'From' }),
-                  e('input', { type: 'date', value: adminFilter.dateTo, onChange: evt => setAdminFilter({...adminFilter, dateTo: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm', placeholder: 'To' }),
+                  e('input', { type: 'date', value: adminFilter.dateFrom, onChange: evt => setAdminFilter({...adminFilter, dateFrom: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' }),
+                  e('input', { type: 'date', value: adminFilter.dateTo, onChange: evt => setAdminFilter({...adminFilter, dateTo: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' }),
                   e('select', { value: adminFilter.status, onChange: evt => setAdminFilter({...adminFilter, status: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' },
                     e('option', { value: 'all' }, 'All Status'),
                     e('option', { value: 'confirmed' }, 'Confirmed'),
@@ -544,7 +536,7 @@
                   e('h3', { className: 'font-bold text-lg text-amber-900' }, 'Bookings (' + getFilteredBookings().length + ')')
                 ),
                 e('div', { className: 'divide-y max-h-96 overflow-y-auto' },
-                  getFilteredBookings().length === 0 ? e('div', { className: 'p-4 text-gray-500 text-center' }, 'No bookings found') :
+                  getFilteredBookings().length === 0 ? e('div', { className: 'p-4 text-gray-500 text-center' }, 'No bookings') :
                   getFilteredBookings().map(booking => e('div', { key: booking.id, className: 'p-4 hover:bg-gray-50 cursor-pointer', onClick: () => setExpandedBooking(expandedBooking === booking.id ? null : booking.id) },
                     e('div', { className: 'flex justify-between items-start' },
                       e('div', null,
@@ -564,9 +556,9 @@
                       e('div', { className: 'flex gap-2 pt-2 flex-wrap' },
                         e('button', { onClick: () => { const nb = {...booking, status: booking.status === 'confirmed' ? 'completed' : 'confirmed'}; setBookings(prev => { const updated = prev.map(b => b.id === booking.id ? nb : b); localStorage.setItem('bookings', JSON.stringify(updated)); return updated; }); setExpandedBooking(null); }, className: 'px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600' }, 'Change Status'),
                         canCancelBooking(booking.bookingDate, booking.bookingTime) && e('button', { onClick: () => { setBookings(prev => { const updated = prev.map(b => b.id === booking.id ? {...b, status: 'cancelled'} : b); localStorage.setItem('bookings', JSON.stringify(updated)); return updated; }); setExpandedBooking(null); }, className: 'px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600' }, 'Cancel'),
-                        !canCancelBooking(booking.bookingDate, booking.bookingTime) && e('span', { className: 'px-3 py-1 bg-gray-300 text-gray-600 rounded text-xs' }, 'Cancel (24h lock)'),
-                        e('a', { href: `mailto:${booking.customerEmail}?subject=Re: Your Nailscape Appointment`, className: 'px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600' }, 'Email'),
-                        e('a', { href: `https://wa.me/${booking.customerPhone.replace(/[^0-9]/g, '')}?text=Hello`, target: '_blank', className: 'px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700' }, 'WhatsApp')
+                        !canCancelBooking(booking.bookingDate, booking.bookingTime) && e('span', { className: 'px-3 py-1 bg-gray-300 text-gray-600 rounded text-xs' }, 'Cancel (24h)'),
+                        e('a', { href: `mailto:${booking.customerEmail}`, className: 'px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600' }, 'Email'),
+                        e('a', { href: `https://wa.me/${booking.customerPhone.replace(/[^0-9]/g, '')}`, target: '_blank', className: 'px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700' }, 'WhatsApp')
                       )
                     )
                   ))
@@ -580,7 +572,6 @@
       return currentPage === 'booking' ? renderBookingPage() : renderAdminPage();
     }
 
-    // RENDER APP
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(React.createElement(NailscapeApp));
   </script>
