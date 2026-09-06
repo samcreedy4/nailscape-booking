@@ -16,17 +16,65 @@
   
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/build/index.min.js"></script>
   <script>
-    // EmailJS Setup - wait for library to load
+    // EmailJS Setup
     if (window.emailjs) {
       window.emailjs.init('XAY86qC56WaLpvftm');
       console.log('EmailJS initialized');
     }
-    
+
+    const SUPABASE_URL = 'https://yoibrnqevcvzlwqdhite.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvaWJubmdldmN2emx3cWRoaXRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MTY0ODksImV4cCI6MjEwNDI5MjQ4OX0.M-AmLlXR46ciiO4SO0W0E829G6gslATDF9DJrSMdsUE';
     const EMAILJS_SERVICE_ID = 'service_gcau9wx';
     const EMAILJS_TEMPLATE_CONFIRM = 'template_alws55p';
 
     const e = React.createElement;
     const { useState, useEffect } = React;
+
+    // Supabase REST API helper
+    const supabaseRest = {
+      async getBookings() {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings?order=booking_date.desc`, {
+            headers: { 
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'apikey': SUPABASE_ANON_KEY
+            }
+          });
+          const data = await res.json();
+          console.log('Fetched bookings:', data);
+          return data || [];
+        } catch (err) {
+          console.error('Fetch bookings error:', err);
+          return [];
+        }
+      },
+
+      async insertBooking(booking) {
+        try {
+          console.log('Inserting booking:', booking);
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings`, {
+            method: 'POST',
+            headers: { 
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'apikey': SUPABASE_ANON_KEY,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(booking)
+          });
+          const data = await res.json();
+          console.log('Insert response:', data);
+          if (!res.ok) {
+            console.error('Insert error:', data);
+            throw new Error(data.message || 'Insert failed');
+          }
+          return data;
+        } catch (err) {
+          console.error('Insert booking error:', err);
+          throw err;
+        }
+      }
+    };
 
     function NailscapeApp() {
       const [currentPage, setCurrentPage] = useState('booking');
@@ -34,13 +82,7 @@
       const [adminEmail, setAdminEmail] = useState('');
       const [adminPassword, setAdminPassword] = useState('');
       const [showPassword, setShowPassword] = useState(false);
-      const [bookings, setBookings] = useState(() => {
-        try {
-          return JSON.parse(localStorage.getItem('bookings')) || [];
-        } catch {
-          return [];
-        }
-      });
+      const [bookings, setBookings] = useState([]);
       const [bookingForm, setBookingForm] = useState({
         customerName: '',
         customerEmail: '',
@@ -81,9 +123,15 @@
         address: 'Herzogenaurach, Germany'
       };
 
+      // Load bookings from Supabase on mount
       useEffect(() => {
-        localStorage.setItem('bookings', JSON.stringify(bookings));
-      }, [bookings]);
+        loadBookings();
+      }, []);
+
+      const loadBookings = async () => {
+        const data = await supabaseRest.getBookings();
+        setBookings(data);
+      };
 
       const generateBookingCode = () => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -197,7 +245,6 @@
         setLoading(true);
         try {
           const newBooking = {
-            id: Date.now(),
             code: pendingCode,
             customer_name: bookingForm.customerName,
             customer_email: bookingForm.customerEmail,
@@ -209,9 +256,12 @@
             message: bookingForm.message,
             total_price: calculateTotalPrice(),
             duration: calculateTotalDuration(),
-            status: 'confirmed',
-            created_at: new Date().toISOString()
+            status: 'confirmed'
           };
+
+          // Insert into Supabase
+          const result = await supabaseRest.insertBooking(newBooking);
+          console.log('Booking created:', result);
 
           // Send email via EmailJS
           try {
@@ -220,7 +270,8 @@
               const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
               const totalPrice = calculateTotalPrice() + '€';
               
-              console.log('Sending email with:', {
+              console.log('Sending email...');
+              const emailResponse = await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_CONFIRM, {
                 to_email: bookingForm.customerEmail,
                 customer_name: bookingForm.customerName,
                 booking_code: pendingCode,
@@ -230,27 +281,13 @@
                 duration: calculateTotalDuration(),
                 total_price: totalPrice
               });
-
-              const response = await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_CONFIRM, {
-                to_email: bookingForm.customerEmail,
-                customer_name: bookingForm.customerName,
-                booking_code: pendingCode,
-                booking_date: bookingDate,
-                booking_time: bookingForm.bookingTime,
-                services: servicesList,
-                duration: calculateTotalDuration(),
-                total_price: totalPrice
-              });
-
-              console.log('Email sent successfully!', response);
-            } else {
-              console.warn('EmailJS not available');
+              console.log('Email sent:', emailResponse);
             }
           } catch (emailErr) {
             console.error('Email send failed:', emailErr);
           }
 
-          setBookings([...bookings, newBooking]);
+          setBookings([...bookings, result[0] || newBooking]);
           setShowConfirmModal(false);
           setSuccessMessage(`✓ Booking confirmed!\nYour Code: ${pendingCode}\n✓ Confirmation email sent to ${bookingForm.customerEmail}`);
           
@@ -268,6 +305,7 @@
           setTimeout(() => setSuccessMessage(''), 8000);
         } catch (err) {
           setErrorMessage('Booking failed: ' + err.message);
+          console.error('Booking error:', err);
         } finally {
           setLoading(false);
         }
