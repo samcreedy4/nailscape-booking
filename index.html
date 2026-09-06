@@ -7,6 +7,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/build/index.min.js"></script>
   <style>
     body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif; }
   </style>
@@ -15,6 +16,13 @@
   <div id="root"></div>
   
   <script>
+    // EmailJS Setup
+    emailjs.init('XAY86qC56WaLpvftm');
+    
+    const EMAILJS_SERVICE_ID = 'service_gcau9wx';
+    const EMAILJS_TEMPLATE_CONFIRM = 'template_alws55p';
+    const EMAILJS_TEMPLATE_RESCHEDULE = 'template_chxluv5';
+
     const e = React.createElement;
     const { useState, useEffect } = React;
 
@@ -204,9 +212,42 @@
             created_at: new Date().toISOString()
           };
 
+          // Send email via EmailJS
+          try {
+            const servicesList = bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', ');
+            const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
+            const totalPrice = calculateTotalPrice() + '€';
+            
+            console.log('Sending email with:', {
+              to_email: bookingForm.customerEmail,
+              customer_name: bookingForm.customerName,
+              booking_code: pendingCode,
+              booking_date: bookingDate,
+              booking_time: bookingForm.bookingTime,
+              services: servicesList,
+              duration: calculateTotalDuration(),
+              total_price: totalPrice
+            });
+
+            await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_CONFIRM, {
+              to_email: bookingForm.customerEmail,
+              customer_name: bookingForm.customerName,
+              booking_code: pendingCode,
+              booking_date: bookingDate,
+              booking_time: bookingForm.bookingTime,
+              services: servicesList,
+              duration: calculateTotalDuration(),
+              total_price: totalPrice
+            });
+
+            console.log('Email sent successfully!');
+          } catch (emailErr) {
+            console.error('Email send failed:', emailErr);
+          }
+
           setBookings([...bookings, newBooking]);
           setShowConfirmModal(false);
-          setSuccessMessage(`✓ Booking confirmed!\nYour Code: ${pendingCode}\n✓ Email sent to ${bookingForm.customerEmail}`);
+          setSuccessMessage(`✓ Booking confirmed!\nYour Code: ${pendingCode}\n✓ Confirmation email sent to ${bookingForm.customerEmail}`);
           
           setBookingForm({
             customerName: '',
