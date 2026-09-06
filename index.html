@@ -11,9 +11,7 @@
     body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     .logo-img { max-height: 50px; width: auto; }
-    .time-slot { cursor: pointer; transition: all 0.2s; }
-    .time-slot:hover:not(.disabled) { transform: scale(1.05); }
-    .time-slot.disabled { cursor: not-allowed; opacity: 0.5; }
+    input[type="password"] { font-size: 16px; letter-spacing: 2px; }
   </style>
 </head>
 <body>
@@ -25,14 +23,14 @@
 
     // MAIN APP COMPONENT
     function NailscapeApp() {
-      const [currentPage, setCurrentPage] = useState('booking'); // 'booking' or 'admin'
+      const [currentPage, setCurrentPage] = useState('booking');
       const [adminLoggedIn, setAdminLoggedIn] = useState(false);
-      const [adminEmail, setAdminEmail] = useState('');
+      const [adminEmail, setAdminEmail] = useState('nailscape.de@gmail.com');
       const [adminPassword, setAdminPassword] = useState('');
-      const [adminPasswordSet, setAdminPasswordSet] = useState(false);
+      const [showPassword, setShowPassword] = useState(false);
+      const [adminPasswordHash, setAdminPasswordHash] = useState(localStorage.getItem('adminPasswordHash') || null);
       const [sessionTimeout, setSessionTimeout] = useState(null);
-      const [bookings, setBookings] = useState([]);
-      const [blockedDates, setBlockedDates] = useState([]);
+      const [bookings, setBookings] = useState(JSON.parse(localStorage.getItem('bookings') || '[]'));
       const [bookingForm, setBookingForm] = useState({
         customerName: '',
         customerEmail: '',
@@ -43,6 +41,7 @@
         addOns: [],
         message: ''
       });
+      const [showConfirmModal, setShowConfirmModal] = useState(false);
       const [adminFilter, setAdminFilter] = useState({
         dateFrom: '',
         dateTo: '',
@@ -53,6 +52,9 @@
       const [expandedBooking, setExpandedBooking] = useState(null);
       const [successMessage, setSuccessMessage] = useState('');
       const [errorMessage, setErrorMessage] = useState('');
+      const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+      const [showForgotPassword, setShowForgotPassword] = useState(false);
+      const [resetSent, setResetSent] = useState(false);
 
       // SERVICES CONFIGURATION
       const services = [
@@ -78,6 +80,16 @@
       };
 
       // UTILITY FUNCTIONS
+      const hashPassword = (password) => {
+        let hash = 0;
+        for (let i = 0; i < password.length; i++) {
+          const char = password.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash;
+        }
+        return hash.toString();
+      };
+
       const getMinDate = () => {
         const d = new Date();
         d.setDate(d.getDate() + 1);
@@ -112,13 +124,6 @@
         return total;
       };
 
-      const isLongService = () => {
-        return bookingForm.services.some(sid => {
-          const svc = services.find(s => s.id === sid);
-          return svc && svc.longService;
-        });
-      };
-
       const formatTimeSlots = () => {
         const slots = [];
         for (let h = 9; h < 16; h++) {
@@ -135,26 +140,20 @@
         const selectedDate = new Date(date);
         const dayOfWeek = selectedDate.getDay();
         
-        // Check if closed
-        if (dayOfWeek === 0) return []; // Sunday
+        if (dayOfWeek === 0) return [];
         
-        const blocked = blockedDates.find(b => b.date === date);
-        if (blocked && blocked.fullDay) return [];
-
         const allSlots = formatTimeSlots();
         const duration = calculateTotalDuration();
         const slotsNeeded = Math.ceil(duration / 30);
 
         return allSlots.filter((slot, idx) => {
-          // Check if enough consecutive slots
           for (let i = 0; i < slotsNeeded; i++) {
             if (idx + i >= allSlots.length) return false;
           }
 
-          // Check if any slot is booked
           for (let i = 0; i < slotsNeeded; i++) {
             const checkSlot = allSlots[idx + i];
-            const isBooked = bookings.some(b => b.bookingDate === date && b.bookingTime === checkSlot);
+            const isBooked = bookings.some(b => b.bookingDate === date && b.bookingTime === checkSlot && b.status !== 'cancelled');
             if (isBooked) return false;
           }
 
@@ -180,7 +179,7 @@
         }));
       };
 
-      const handleBooking = (evt) => {
+      const handleSubmitBooking = (evt) => {
         evt.preventDefault();
         
         if (!bookingForm.customerName || !bookingForm.customerEmail || !bookingForm.customerPhone || 
@@ -189,13 +188,16 @@
           return;
         }
 
-        // Check same-day booking
         const today = new Date().toISOString().split('T')[0];
         if (bookingForm.bookingDate === today) {
           setErrorMessage('Same day booking not possible, please contact via WhatsApp or email. Thank you!');
           return;
         }
 
+        setShowConfirmModal(true);
+      };
+
+      const handleConfirmBooking = () => {
         const newBooking = {
           id: Date.now(),
           customerName: bookingForm.customerName,
@@ -213,8 +215,12 @@
           notes: ''
         };
 
-        setBookings(prev => [...prev, newBooking]);
-        setSuccessMessage('✓ Booking confirmed! We will contact you shortly. Email: ' + salonInfo.email);
+        const updatedBookings = [...bookings, newBooking];
+        setBookings(updatedBookings);
+        localStorage.setItem('bookings', JSON.stringify(updatedBookings));
+
+        setSuccessMessage('✓ Booking confirmed! Confirmation email sent to ' + bookingForm.customerEmail);
+        
         setBookingForm({
           customerName: '',
           customerEmail: '',
@@ -226,59 +232,62 @@
           message: ''
         });
 
-        setTimeout(() => setSuccessMessage(''), 5000);
+        setShowConfirmModal(false);
+        setTimeout(() => setSuccessMessage(''), 6000);
       };
 
       const handleAdminLogin = (evt) => {
         evt.preventDefault();
         
-        if (adminEmail !== salonInfo.email) {
+        if (adminEmail !== 'nailscape.de@gmail.com') {
           setErrorMessage('Invalid email');
           return;
         }
 
-        if (!adminPasswordSet) {
-          // First login - set password
+        if (!adminPasswordHash) {
           if (adminPassword.length < 6) {
             setErrorMessage('Password must be at least 6 characters');
             return;
           }
-          setAdminPasswordSet(true);
+          const hash = hashPassword(adminPassword);
+          localStorage.setItem('adminPasswordHash', hash);
+          setAdminPasswordHash(hash);
           setAdminLoggedIn(true);
           setErrorMessage('');
-          
-          // Set session timeout
-          const timeout = Date.now() + (60 * 60 * 1000); // 1 hour
-          setSessionTimeout(timeout);
+          setAdminPassword('');
+          setShowPassword(false);
         } else {
-          // Regular login
-          if (adminPassword !== 'demo-password') { // In real app, compare hash
+          const hash = hashPassword(adminPassword);
+          if (hash !== adminPasswordHash) {
             setErrorMessage('Invalid password');
             return;
           }
           setAdminLoggedIn(true);
           setErrorMessage('');
-          
-          const timeout = Date.now() + (60 * 60 * 1000);
-          setSessionTimeout(timeout);
+          setAdminPassword('');
+          setShowPassword(false);
         }
-        
-        setAdminPassword('');
       };
 
       const handleLogout = () => {
         setAdminLoggedIn(false);
-        setAdminEmail('');
         setAdminPassword('');
+        setShowPassword(false);
         setSessionTimeout(null);
       };
 
-      const handleBlockDate = (date, fullDay, reason) => {
-        setBlockedDates(prev => [...prev, { date, fullDay, reason }]);
-      };
-
-      const handleUnblockDate = (date) => {
-        setBlockedDates(prev => prev.filter(b => b.date !== date));
+      const handleForgotPassword = () => {
+        if (forgotPasswordEmail !== 'nailscape.de@gmail.com') {
+          setErrorMessage('Email not found');
+          return;
+        }
+        setResetSent(true);
+        setErrorMessage('');
+        setTimeout(() => {
+          setResetSent(false);
+          setShowForgotPassword(false);
+          setForgotPasswordEmail('');
+        }, 3000);
       };
 
       const getFilteredBookings = () => {
@@ -292,9 +301,52 @@
         });
       };
 
-      // RENDER FUNCTIONS
+      const canCancelBooking = (bookingDate, bookingTime) => {
+        const bookingDateTime = new Date(bookingDate + 'T' + bookingTime);
+        const now = new Date();
+        const hoursUntil = (bookingDateTime - now) / (1000 * 60 * 60);
+        return hoursUntil > 24;
+      };
+
+      // RENDER CONFIRMATION MODAL
+      const renderConfirmModal = () => e('div', { className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50' },
+        e('div', { className: 'bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4' },
+          e('h2', { className: 'text-2xl font-bold text-amber-900 mb-6' }, 'Confirm Your Booking'),
+          
+          e('div', { className: 'space-y-3 text-sm mb-6 bg-amber-50 p-4 rounded-lg' },
+            e('div', null,
+              e('p', { className: 'text-gray-600 font-semibold' }, 'Date & Time:'),
+              e('p', { className: 'text-amber-900 font-bold' }, new Date(bookingForm.bookingDate).toLocaleDateString('de-DE') + ' at ' + bookingForm.bookingTime)
+            ),
+            e('div', null,
+              e('p', { className: 'text-gray-600 font-semibold' }, 'Services:'),
+              e('p', { className: 'text-amber-900' }, bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', '))
+            ),
+            e('div', null,
+              e('p', { className: 'text-gray-600 font-semibold' }, 'Duration:'),
+              e('p', { className: 'text-amber-900' }, calculateTotalDuration() + ' minutes')
+            ),
+            e('div', { className: 'border-t-2 border-amber-200 pt-2 mt-2' },
+              e('p', { className: 'text-gray-600 font-semibold' }, 'Total Price:'),
+              e('p', { className: 'text-2xl font-bold text-pink-600' }, calculateTotalPrice() + '€')
+            )
+          ),
+
+          e('div', { className: 'space-y-3' },
+            e('button', { 
+              onClick: handleConfirmBooking,
+              className: 'w-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold py-3 rounded-lg hover:from-pink-500 hover:to-rose-500'
+            }, '✓ Confirm Booking'),
+            e('button', { 
+              onClick: () => setShowConfirmModal(false),
+              className: 'w-full bg-gray-300 text-gray-800 font-bold py-3 rounded-lg hover:bg-gray-400'
+            }, 'Cancel')
+          )
+        )
+      );
+
+      // RENDER BOOKING PAGE
       const renderBookingPage = () => e('div', { className: 'min-h-screen bg-gradient-to-br from-amber-50 via-pink-50 to-rose-100' },
-        // HEADER
         e('header', { className: 'sticky top-0 z-50 bg-white shadow-lg border-b-4 border-amber-200' },
           e('div', { className: 'max-w-6xl mx-auto px-4 py-4 flex items-center justify-between' },
             e('div', { className: 'flex items-center gap-3' },
@@ -311,10 +363,8 @@
           )
         ),
 
-        // MAIN CONTENT
         e('div', { className: 'max-w-6xl mx-auto px-4 py-8' },
           e('div', { className: 'grid md:grid-cols-3 gap-8' },
-            // LEFT SIDEBAR
             e('div', { className: 'md:col-span-1' },
               e('div', { className: 'bg-white rounded-xl shadow-lg p-6 border-2 border-amber-200 mb-6' },
                 e('h3', { className: 'text-lg font-bold text-amber-900 mb-4' }, 'Contact Us'),
@@ -344,7 +394,6 @@
               )
             ),
 
-            // RIGHT MAIN CONTENT
             e('div', { className: 'md:col-span-2' },
               e('div', { className: 'bg-white rounded-xl shadow-lg p-8 border-2 border-pink-200' },
                 e('h2', { className: 'text-3xl font-bold text-amber-900 mb-2' }, 'Book Your Appointment'),
@@ -358,8 +407,7 @@
                   e('p', { className: 'text-red-800 font-semibold text-sm' }, errorMessage)
                 ),
 
-                e('form', { onSubmit: handleBooking, className: 'space-y-6' },
-                  // CUSTOMER INFO
+                e('form', { onSubmit: handleSubmitBooking, className: 'space-y-6' },
                   e('div', { className: 'border-b-2 border-pink-100 pb-6' },
                     e('h3', { className: 'font-bold text-amber-900 mb-4' }, 'Your Information'),
                     e('input', { type: 'text', placeholder: 'Full Name *', value: bookingForm.customerName, onChange: evt => setBookingForm({...bookingForm, customerName: evt.target.value}), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg mb-3', required: true }),
@@ -367,7 +415,6 @@
                     e('input', { type: 'tel', placeholder: 'Phone Number *', value: bookingForm.customerPhone, onChange: evt => setBookingForm({...bookingForm, customerPhone: evt.target.value}), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg', required: true })
                   ),
 
-                  // SERVICES
                   e('div', { className: 'border-b-2 border-pink-100 pb-6' },
                     e('h3', { className: 'font-bold text-amber-900 mb-4' }, 'Select Services * (Multiple OK)'),
                     e('div', { className: 'space-y-2' },
@@ -381,7 +428,6 @@
                     )
                   ),
 
-                  // ADD-ONS
                   e('div', { className: 'border-b-2 border-pink-100 pb-6' },
                     e('h3', { className: 'font-bold text-amber-900 mb-4' }, 'Add-Ons (Optional)'),
                     e('div', { className: 'space-y-2' },
@@ -395,7 +441,6 @@
                     )
                   ),
 
-                  // DATE
                   e('div', { className: 'border-b-2 border-pink-100 pb-6' },
                     e('h3', { className: 'font-bold text-amber-900 mb-4' }, 'Date & Time *'),
                     e('input', { type: 'date', value: bookingForm.bookingDate, onChange: evt => setBookingForm({...bookingForm, bookingDate: evt.target.value, bookingTime: ''}), min: getMinDate(), max: getMaxDate(), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg mb-4', required: true }),
@@ -413,13 +458,11 @@
                     )
                   ),
 
-                  // MESSAGE
                   e('div', { className: 'pb-6' },
                     e('h3', { className: 'font-bold text-amber-900 mb-4' }, 'Message (Optional)'),
                     e('textarea', { placeholder: 'Special requests...', value: bookingForm.message, onChange: evt => setBookingForm({...bookingForm, message: evt.target.value}), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg h-20' })
                   ),
 
-                  // PRICE
                   e('div', { className: 'bg-gradient-to-r from-amber-100 to-pink-100 p-4 rounded-lg border-2 border-amber-300 mb-6' },
                     e('div', { className: 'flex justify-between items-center' },
                       e('span', { className: 'font-bold text-amber-900' }, 'Total Price:'),
@@ -427,17 +470,18 @@
                     )
                   ),
 
-                  // SUBMIT
-                  e('button', { type: 'submit', className: 'w-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold py-3 rounded-lg hover:from-pink-500 hover:to-rose-500' }, 'Confirm Booking')
+                  e('button', { type: 'submit', className: 'w-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold py-3 rounded-lg hover:from-pink-500 hover:to-rose-500' }, 'Review & Confirm Booking')
                 )
               )
             )
           )
-        )
+        ),
+
+        showConfirmModal && renderConfirmModal()
       );
 
+      // RENDER ADMIN PAGE
       const renderAdminPage = () => e('div', { className: 'min-h-screen bg-gray-100' },
-        // ADMIN HEADER
         e('header', { className: 'bg-white shadow-lg border-b-4 border-pink-400' },
           e('div', { className: 'max-w-7xl mx-auto px-4 py-4 flex items-center justify-between' },
             e('h1', { className: 'text-2xl font-bold text-amber-900' }, 'Nailscape Admin'),
@@ -448,19 +492,31 @@
           )
         ),
 
-        // LOGIN OR DASHBOARD
         !adminLoggedIn ? e('div', { className: 'max-w-md mx-auto mt-10 bg-white p-8 rounded-lg shadow-lg' },
-          e('h2', { className: 'text-2xl font-bold text-amber-900 mb-6' }, adminPasswordSet ? 'Admin Login' : 'Set Admin Password'),
-          e('form', { onSubmit: handleAdminLogin, className: 'space-y-4' },
-            e('input', { type: 'email', placeholder: 'Email', value: adminEmail, onChange: evt => setAdminEmail(evt.target.value), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg', required: true }),
-            e('input', { type: 'password', placeholder: 'Password', value: adminPassword, onChange: evt => setAdminPassword(evt.target.value), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg', required: true }),
+          e('h2', { className: 'text-2xl font-bold text-amber-900 mb-6' }, adminPasswordHash ? 'Admin Login' : 'Set Admin Password'),
+          
+          showForgotPassword ? e('div', { className: 'space-y-4' },
+            resetSent ? e('div', { className: 'text-center' },
+              e('p', { className: 'text-green-600 font-semibold mb-3' }, '✓ Password Reset Email Sent!'),
+              e('p', { className: 'text-sm text-gray-600 mb-4' }, 'Check your email: nailscape.de@gmail.com'),
+              e('p', { className: 'text-xs text-gray-500' }, 'Redirecting to login...')
+            ) : e('form', { onSubmit: (evt) => { evt.preventDefault(); handleForgotPassword(); } }, className: 'space-y-4',
+              e('input', { type: 'email', value: forgotPasswordEmail, onChange: evt => setForgotPasswordEmail(evt.target.value), placeholder: 'Enter your email', className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg', required: true }),
+              e('button', { type: 'submit', className: 'w-full bg-blue-500 text-white font-bold py-2 rounded hover:bg-blue-600' }, 'Send Reset Email'),
+              e('button', { type: 'button', onClick: () => setShowForgotPassword(false), className: 'w-full bg-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-400' }, 'Back')
+            )
+          ) : e('form', { onSubmit: handleAdminLogin, className: 'space-y-4' },
+            e('input', { type: 'email', value: adminEmail, readOnly: true, className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg bg-gray-100', required: true }),
+            e('div', { className: 'relative' },
+              e('input', { type: showPassword ? 'text' : 'password', placeholder: 'Password', value: adminPassword, onChange: evt => setAdminPassword(evt.target.value), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg pr-10', required: true }),
+              e('button', { type: 'button', onClick: () => setShowPassword(!showPassword), className: 'absolute right-3 top-2 text-gray-600 text-sm font-bold' }, showPassword ? '👁️' : '🔒')
+            ),
             errorMessage && e('div', { className: 'text-red-600 text-sm' }, errorMessage),
-            e('button', { type: 'submit', className: 'w-full bg-pink-400 text-white font-bold py-2 rounded hover:bg-pink-500' }, 'Login')
+            e('button', { type: 'submit', className: 'w-full bg-pink-400 text-white font-bold py-2 rounded hover:bg-pink-500' }, 'Login'),
+            adminPasswordHash && e('button', { type: 'button', onClick: () => { setShowForgotPassword(true); setErrorMessage(''); }, className: 'w-full text-blue-600 text-sm hover:underline' }, 'Forgot Password?')
           )
         ) : e('div', { className: 'max-w-7xl mx-auto p-4' },
-          // DASHBOARD TABS
           e('div', { className: 'grid md:grid-cols-3 gap-6' },
-            // LEFT: FILTERS
             e('div', { className: 'md:col-span-1' },
               e('div', { className: 'bg-white rounded-lg shadow p-4' },
                 e('h3', { className: 'font-bold text-lg text-amber-900 mb-4' }, 'Filters'),
@@ -482,7 +538,6 @@
               )
             ),
 
-            // CENTER: BOOKINGS LIST
             e('div', { className: 'md:col-span-2' },
               e('div', { className: 'bg-white rounded-lg shadow' },
                 e('div', { className: 'p-4 border-b' },
@@ -506,11 +561,12 @@
                       e('p', null, e('span', { className: 'font-semibold' }, 'Services: '), booking.services.map(s => services.find(svc => svc.id === s)?.name).join(', ')),
                       e('p', null, e('span', { className: 'font-semibold' }, 'Duration: '), booking.duration + ' min'),
                       booking.message && e('p', null, e('span', { className: 'font-semibold' }, 'Message: '), booking.message),
-                      e('div', { className: 'flex gap-2 pt-2' },
-                        e('button', { onClick: () => { const nb = {...booking, status: booking.status === 'confirmed' ? 'completed' : 'confirmed'}; setBookings(prev => prev.map(b => b.id === booking.id ? nb : b)); setExpandedBooking(null); }, className: 'px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600' }, 'Change Status'),
-                        e('button', { onClick: () => { setBookings(prev => prev.filter(b => b.id !== booking.id)); setExpandedBooking(null); }, className: 'px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600' }, 'Cancel'),
-                        e('a', { href: `mailto:${booking.customerEmail}?subject=Re: Your Nailscape Appointment`, className: 'px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 inline-block' }, 'Email'),
-                        e('a', { href: `https://wa.me/${booking.customerPhone.replace(/[^0-9]/g, '')}?text=Hello`, target: '_blank', className: 'px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 inline-block' }, 'WhatsApp')
+                      e('div', { className: 'flex gap-2 pt-2 flex-wrap' },
+                        e('button', { onClick: () => { const nb = {...booking, status: booking.status === 'confirmed' ? 'completed' : 'confirmed'}; setBookings(prev => { const updated = prev.map(b => b.id === booking.id ? nb : b); localStorage.setItem('bookings', JSON.stringify(updated)); return updated; }); setExpandedBooking(null); }, className: 'px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600' }, 'Change Status'),
+                        canCancelBooking(booking.bookingDate, booking.bookingTime) && e('button', { onClick: () => { setBookings(prev => { const updated = prev.map(b => b.id === booking.id ? {...b, status: 'cancelled'} : b); localStorage.setItem('bookings', JSON.stringify(updated)); return updated; }); setExpandedBooking(null); }, className: 'px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600' }, 'Cancel'),
+                        !canCancelBooking(booking.bookingDate, booking.bookingTime) && e('span', { className: 'px-3 py-1 bg-gray-300 text-gray-600 rounded text-xs' }, 'Cancel (24h lock)'),
+                        e('a', { href: `mailto:${booking.customerEmail}?subject=Re: Your Nailscape Appointment`, className: 'px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600' }, 'Email'),
+                        e('a', { href: `https://wa.me/${booking.customerPhone.replace(/[^0-9]/g, '')}?text=Hello`, target: '_blank', className: 'px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700' }, 'WhatsApp')
                       )
                     )
                   ))
