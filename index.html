@@ -231,7 +231,7 @@
               
               console.log('📧 Sending email to:', bookingForm.customerEmail);
               const emailResponse = await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_CONFIRM, {
-                to_email: bookingForm.customerEmail,
+                client_email: bookingForm.customerEmail,
                 client_name: bookingForm.customerName,
                 booking_code: pendingCode,
                 date_time: bookingDate + ' at ' + bookingForm.bookingTime,
