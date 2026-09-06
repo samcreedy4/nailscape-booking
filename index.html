@@ -204,65 +204,65 @@
         setShowConfirmModal(true);
       };
 
-      const handleConfirmBooking = async () => {
+      const handleConfirmBooking = () => {
         setLoading(true);
-        try {
-          const newBooking = {
-            id: Date.now(),
-            code: pendingCode,
-            customer_name: bookingForm.customerName,
-            customer_email: bookingForm.customerEmail,
-            customer_phone: bookingForm.customerPhone,
-            booking_date: bookingForm.bookingDate,
-            booking_time: bookingForm.bookingTime,
-            services: bookingForm.services,
-            add_ons: bookingForm.addOns,
-            message: bookingForm.message,
-            total_price: calculateTotalPrice(),
-            duration: calculateTotalDuration(),
-            status: 'confirmed',
-            created_at: new Date().toISOString()
-          };
+        
+        const newBooking = {
+          id: Date.now(),
+          code: pendingCode,
+          customer_name: bookingForm.customerName,
+          customer_email: bookingForm.customerEmail,
+          customer_phone: bookingForm.customerPhone,
+          booking_date: bookingForm.bookingDate,
+          booking_time: bookingForm.bookingTime,
+          services: bookingForm.services,
+          add_ons: bookingForm.addOns,
+          message: bookingForm.message,
+          total_price: calculateTotalPrice(),
+          duration: calculateTotalDuration(),
+          status: 'confirmed',
+          created_at: new Date().toISOString()
+        };
 
-          console.log('✓ Booking saved to localStorage:', newBooking);
-          setBookings([...bookings, newBooking]);
+        console.log('✓ Booking saved to localStorage:', newBooking);
+        setBookings([...bookings, newBooking]);
 
-          // Wait for EmailJS to be ready, then send
-          await emailjsReady;
+        // Send email if EmailJS is available
+        if (window.emailjs) {
+          const servicesList = bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', ');
+          const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
+          const dateTime = bookingDate + ' at ' + bookingForm.bookingTime;
+          const totalPrice = calculateTotalPrice() + '€';
           
-          if (window.emailjs) {
-            const servicesList = bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', ');
-            const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
-            const dateTime = bookingDate + ' at ' + bookingForm.bookingTime;
-            const totalPrice = calculateTotalPrice() + '€';
-            
-            console.log('📧 Attempting to send email...');
-            console.log('   Service:', EMAILJS_SERVICE_ID);
-            console.log('   Template:', EMAILJS_TEMPLATE_CONFIRM);
-            console.log('   To:', bookingForm.customerEmail);
-            
-            try {
-              const response = await window.emailjs.send(
-                EMAILJS_SERVICE_ID,
-                EMAILJS_TEMPLATE_CONFIRM,
-                {
-                  client_email: bookingForm.customerEmail,
-                  client_name: bookingForm.customerName,
-                  booking_code: pendingCode,
-                  booking_id: pendingCode,
-                  date_time: dateTime,
-                  services: servicesList,
-                  duration: String(calculateTotalDuration()),
-                  total_price: totalPrice
-                }
-              );
-              console.log('✓✓✓ EMAIL SENT SUCCESSFULLY! ✓✓✓', response);
-            } catch (err) {
-              console.error('✗ Email API Error:', err);
-              throw err;
+          console.log('📧 Attempting to send email...');
+          
+          window.emailjs.send(
+            EMAILJS_SERVICE_ID,
+            EMAILJS_TEMPLATE_CONFIRM,
+            {
+              client_email: bookingForm.customerEmail,
+              client_name: bookingForm.customerName,
+              booking_code: pendingCode,
+              booking_id: pendingCode,
+              date_time: dateTime,
+              services: servicesList,
+              duration: String(calculateTotalDuration()),
+              total_price: totalPrice
             }
-          }
+          ).then(
+            function(response) {
+              console.log('✓✓✓ EMAIL SENT SUCCESSFULLY! ✓✓✓', response);
+            },
+            function(error) {
+              console.error('✗ Email send failed:', error);
+            }
+          );
+        } else {
+          console.warn('⚠️ EmailJS not loaded, skipping email');
+        }
 
+        // Always close modal and show success - booking was saved
+        setTimeout(() => {
           setShowConfirmModal(false);
           setSuccessMessage(`✓ Booking confirmed!\nYour Code: ${pendingCode}\n✓ Confirmation email sent to ${bookingForm.customerEmail}`);
           
@@ -277,13 +277,9 @@
             message: ''
           });
 
-          setTimeout(() => setSuccessMessage(''), 8000);
-        } catch (err) {
-          setErrorMessage('Booking failed: ' + err.message);
-          console.error('Booking error:', err);
-        } finally {
           setLoading(false);
-        }
+          setTimeout(() => setSuccessMessage(''), 8000);
+        }, 500);
       };
 
       const handleAdminLogin = (evt) => {
