@@ -14,19 +14,14 @@
 <body>
   <div id="root"></div>
   
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/build/index.min.js"></script>
   <script>
-    // Supabase Setup
-    const SUPABASE_URL = 'https://yoibrnqevcvzlwqdhite.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvaWJubmdldmN2emx3cWRoaXRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MTY0ODksImV4cCI6MjEwNDI5MjQ4OX0.M-AmLlXR46ciiO4SO0W0E829G6gslATDF9DJrSMdsUE';
-    
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
     // EmailJS Setup
     if (window.emailjs) {
       window.emailjs.init('XAY86qC56WaLpvftm');
-      console.log('EmailJS initialized');
+      console.log('✓ EmailJS initialized');
+    } else {
+      console.error('✗ EmailJS library failed to load');
     }
 
     const EMAILJS_SERVICE_ID = 'service_gcau9wx';
@@ -41,7 +36,13 @@
       const [adminEmail, setAdminEmail] = useState('');
       const [adminPassword, setAdminPassword] = useState('');
       const [showPassword, setShowPassword] = useState(false);
-      const [bookings, setBookings] = useState([]);
+      const [bookings, setBookings] = useState(() => {
+        try {
+          return JSON.parse(localStorage.getItem('bookings')) || [];
+        } catch {
+          return [];
+        }
+      });
       const [bookingForm, setBookingForm] = useState({
         customerName: '',
         customerEmail: '',
@@ -83,23 +84,8 @@
       };
 
       useEffect(() => {
-        loadBookings();
-      }, []);
-
-      const loadBookings = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('bookings')
-            .select('*')
-            .order('booking_date', { ascending: false });
-          
-          if (error) throw error;
-          setBookings(data || []);
-          console.log('Bookings loaded:', data);
-        } catch (err) {
-          console.error('Load bookings error:', err);
-        }
-      };
+        localStorage.setItem('bookings', JSON.stringify(bookings));
+      }, [bookings]);
 
       const generateBookingCode = () => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -213,6 +199,7 @@
         setLoading(true);
         try {
           const newBooking = {
+            id: Date.now(),
             code: pendingCode,
             customer_name: bookingForm.customerName,
             customer_email: bookingForm.customerEmail,
@@ -224,22 +211,11 @@
             message: bookingForm.message,
             total_price: calculateTotalPrice(),
             duration: calculateTotalDuration(),
-            status: 'confirmed'
+            status: 'confirmed',
+            created_at: new Date().toISOString()
           };
 
-          console.log('Inserting booking into Supabase:', newBooking);
-          
-          const { data, error } = await supabase
-            .from('bookings')
-            .insert([newBooking])
-            .select();
-
-          if (error) {
-            console.error('Supabase insert error:', error);
-            throw error;
-          }
-
-          console.log('Booking created:', data);
+          console.log('Booking created in localStorage:', newBooking);
 
           // Send email via EmailJS
           try {
@@ -248,7 +224,7 @@
               const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
               const totalPrice = calculateTotalPrice() + '€';
               
-              console.log('Sending email...');
+              console.log('📧 Sending email to:', bookingForm.customerEmail);
               const emailResponse = await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_CONFIRM, {
                 to_email: bookingForm.customerEmail,
                 customer_name: bookingForm.customerName,
@@ -259,13 +235,13 @@
                 duration: calculateTotalDuration(),
                 total_price: totalPrice
               });
-              console.log('Email sent:', emailResponse);
+              console.log('✓ Email sent successfully!', emailResponse);
             }
           } catch (emailErr) {
-            console.error('Email send failed:', emailErr);
+            console.error('✗ Email send failed:', emailErr);
           }
 
-          setBookings([...bookings, data[0] || newBooking]);
+          setBookings([...bookings, newBooking]);
           setShowConfirmModal(false);
           setSuccessMessage(`✓ Booking confirmed!\nYour Code: ${pendingCode}\n✓ Confirmation email sent to ${bookingForm.customerEmail}`);
           
@@ -283,7 +259,7 @@
           setTimeout(() => setSuccessMessage(''), 8000);
         } catch (err) {
           setErrorMessage('Booking failed: ' + err.message);
-          console.error('Booking error:', err);
+          console.error('Error:', err);
         } finally {
           setLoading(false);
         }
@@ -369,7 +345,6 @@
         )
       );
 
-      // [Booking page render kept the same - truncated for brevity]
       const renderBookingPage = () => e('div', { className: 'min-h-screen bg-gradient-to-br from-amber-50 via-pink-50 to-rose-100' },
         e('header', { className: 'sticky top-0 z-50 bg-white shadow-lg border-b-4 border-amber-200' },
           e('div', { className: 'max-w-6xl mx-auto px-4 py-4 flex items-center justify-between' },
