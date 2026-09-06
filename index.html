@@ -10,7 +10,6 @@
   <style>
     body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    .logo-img { max-height: 50px; width: auto; }
     input[type="password"] { font-size: 16px; letter-spacing: 2px; }
   </style>
 </head>
@@ -24,7 +23,7 @@
     function NailscapeApp() {
       const [currentPage, setCurrentPage] = useState('booking');
       const [adminLoggedIn, setAdminLoggedIn] = useState(false);
-      const [adminEmail, setAdminEmail] = useState('nailscape.de@gmail.com');
+      const [adminEmail] = useState('nailscape.de@gmail.com');
       const [adminPassword, setAdminPassword] = useState('');
       const [showPassword, setShowPassword] = useState(false);
       const [adminPasswordHash, setAdminPasswordHash] = useState(localStorage.getItem('adminPasswordHash') || null);
@@ -40,18 +39,18 @@
         message: ''
       });
       const [showConfirmModal, setShowConfirmModal] = useState(false);
+      const [lastBookingCode, setLastBookingCode] = useState('');
       const [adminFilter, setAdminFilter] = useState({
+        searchCode: '',
+        searchEmail: '',
         dateFrom: '',
         dateTo: '',
-        status: 'all',
-        service: 'all',
-        searchName: ''
+        status: 'all'
       });
       const [expandedBooking, setExpandedBooking] = useState(null);
       const [successMessage, setSuccessMessage] = useState('');
       const [errorMessage, setErrorMessage] = useState('');
       const [showForgotPassword, setShowForgotPassword] = useState(false);
-      const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
       const [resetSent, setResetSent] = useState(false);
 
       const services = [
@@ -76,10 +75,21 @@
         address: 'Herzogenaurach, Germany'
       };
 
-      const hashPassword = (password) => {
+      // GENERATE UNIQUE CODE
+      const generateBookingCode = () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return code;
+      };
+
+      // SIMPLE PASSWORD HASH
+      const simpleHash = (str) => {
         let hash = 0;
-        for (let i = 0; i < password.length; i++) {
-          const char = password.charCodeAt(i);
+        for (let i = 0; i < str.length; i++) {
+          const char = str.charCodeAt(i);
           hash = ((hash << 5) - hash) + char;
           hash = hash & hash;
         }
@@ -149,7 +159,11 @@
 
           for (let i = 0; i < slotsNeeded; i++) {
             const checkSlot = allSlots[idx + i];
-            const isBooked = bookings.some(b => b.bookingDate === date && b.bookingTime === checkSlot && b.status !== 'cancelled');
+            const isBooked = bookings.some(b => 
+              b.bookingDate === date && 
+              b.bookingTime === checkSlot && 
+              b.status === 'confirmed'
+            );
             if (isBooked) return false;
           }
 
@@ -194,8 +208,11 @@
       };
 
       const handleConfirmBooking = () => {
+        const bookingCode = generateBookingCode();
+        
         const newBooking = {
           id: Date.now(),
+          code: bookingCode,
           customerName: bookingForm.customerName,
           customerEmail: bookingForm.customerEmail,
           customerPhone: bookingForm.customerPhone,
@@ -207,15 +224,17 @@
           totalPrice: calculateTotalPrice(),
           duration: calculateTotalDuration(),
           status: 'confirmed',
-          createdAt: new Date().toLocaleString('de-DE'),
-          notes: ''
+          createdAt: new Date().toLocaleString('de-DE')
         };
 
         const updatedBookings = [...bookings, newBooking];
         setBookings(updatedBookings);
         localStorage.setItem('bookings', JSON.stringify(updatedBookings));
 
-        setSuccessMessage('✓ Booking confirmed! Confirmation email sent to ' + bookingForm.customerEmail);
+        setLastBookingCode(bookingCode);
+        setShowConfirmModal(false);
+        
+        setSuccessMessage(`✓ Booking confirmed! Code: ${bookingCode}\n✓ Confirmation email sent to ${bookingForm.customerEmail}`);
         
         setBookingForm({
           customerName: '',
@@ -228,24 +247,20 @@
           message: ''
         });
 
-        setShowConfirmModal(false);
-        setTimeout(() => setSuccessMessage(''), 6000);
+        setTimeout(() => setSuccessMessage(''), 8000);
       };
 
       const handleAdminLogin = (evt) => {
         evt.preventDefault();
         
-        if (adminEmail !== 'nailscape.de@gmail.com') {
-          setErrorMessage('Invalid email');
+        if (adminPassword.length < 6) {
+          setErrorMessage('Password must be at least 6 characters');
           return;
         }
 
+        const hash = simpleHash(adminPassword);
+        
         if (!adminPasswordHash) {
-          if (adminPassword.length < 6) {
-            setErrorMessage('Password must be at least 6 characters');
-            return;
-          }
-          const hash = hashPassword(adminPassword);
           localStorage.setItem('adminPasswordHash', hash);
           setAdminPasswordHash(hash);
           setAdminLoggedIn(true);
@@ -253,7 +268,6 @@
           setAdminPassword('');
           setShowPassword(false);
         } else {
-          const hash = hashPassword(adminPassword);
           if (hash !== adminPasswordHash) {
             setErrorMessage('Invalid password');
             return;
@@ -272,26 +286,23 @@
       };
 
       const handleForgotPassword = () => {
-        if (forgotPasswordEmail !== 'nailscape.de@gmail.com') {
-          setErrorMessage('Email not found');
-          return;
-        }
         setResetSent(true);
         setErrorMessage('');
         setTimeout(() => {
           setResetSent(false);
           setShowForgotPassword(false);
-          setForgotPasswordEmail('');
+          localStorage.removeItem('adminPasswordHash');
+          setAdminPasswordHash(null);
         }, 3000);
       };
 
       const getFilteredBookings = () => {
         return bookings.filter(b => {
+          if (adminFilter.searchCode && !b.code.includes(adminFilter.searchCode.toUpperCase())) return false;
+          if (adminFilter.searchEmail && !b.customerEmail.toLowerCase().includes(adminFilter.searchEmail.toLowerCase())) return false;
           if (adminFilter.dateFrom && b.bookingDate < adminFilter.dateFrom) return false;
           if (adminFilter.dateTo && b.bookingDate > adminFilter.dateTo) return false;
           if (adminFilter.status !== 'all' && b.status !== adminFilter.status) return false;
-          if (adminFilter.service !== 'all' && !b.services.includes(adminFilter.service)) return false;
-          if (adminFilter.searchName && !b.customerName.toLowerCase().includes(adminFilter.searchName.toLowerCase())) return false;
           return true;
         });
       };
@@ -314,7 +325,7 @@
             ),
             e('div', null,
               e('p', { className: 'text-gray-600 font-semibold' }, 'Services:'),
-              e('p', { className: 'text-amber-900' }, bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', '))
+              e('p', { className: 'text-amber-900 text-xs' }, bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', '))
             ),
             e('div', null,
               e('p', { className: 'text-gray-600 font-semibold' }, 'Duration:'),
@@ -349,10 +360,10 @@
                 e('p', { className: 'text-xs text-pink-600' }, 'Nails & Brows')
               )
             ),
-            e('button', {
-              onClick: () => setCurrentPage('admin'),
-              className: 'px-6 py-2 bg-pink-400 text-white rounded-lg font-semibold hover:bg-pink-500'
-            }, 'Admin')
+            e('div', { className: 'space-x-2' },
+              e('button', { onClick: () => setCurrentPage('search'), className: 'px-4 py-2 bg-blue-400 text-white rounded-lg font-semibold hover:bg-blue-500' }, 'My Bookings'),
+              e('button', { onClick: () => setCurrentPage('admin'), className: 'px-4 py-2 bg-pink-400 text-white rounded-lg font-semibold hover:bg-pink-500' }, 'Admin')
+            )
           )
         ),
 
@@ -373,11 +384,11 @@
                 e('h3', { className: 'text-lg font-bold text-amber-900 mb-4' }, 'Services & Pricing'),
                 e('div', { className: 'space-y-2 text-sm' },
                   services.map(s => e('div', { key: s.id, className: 'flex justify-between pb-2 border-b border-amber-100' },
-                    e('span', { className: 'text-amber-900 font-semibold' }, s.name),
+                    e('span', { className: 'text-amber-900 font-semibold text-xs' }, s.name),
                     e('span', { className: 'text-pink-600 font-bold' }, s.price + '€')
                   )),
                   e('div', { className: 'pt-3 mt-3 border-t-2 border-amber-300' },
-                    e('p', { className: 'font-bold text-amber-900 mb-2' }, 'Add-Ons'),
+                    e('p', { className: 'font-bold text-amber-900 mb-2 text-xs' }, 'Add-Ons'),
                     addOns.map(a => e('div', { key: a.id, className: 'flex justify-between text-xs py-1' },
                       e('span', { className: 'text-gray-700' }, a.name),
                       e('span', { className: 'font-semibold text-pink-600' }, '+' + a.price + '€')
@@ -393,7 +404,7 @@
                 e('p', { className: 'text-gray-600 mb-6' }, 'Minimum 24 hours in advance • Monday - Saturday'),
                 
                 successMessage && e('div', { className: 'mb-6 bg-green-100 border-l-4 border-green-500 p-4 rounded' },
-                  e('p', { className: 'text-green-800 font-semibold text-sm' }, successMessage)
+                  e('p', { className: 'text-green-800 font-semibold text-sm whitespace-pre-wrap' }, successMessage)
                 ),
                 
                 errorMessage && e('div', { className: 'mb-6 bg-red-100 border-l-4 border-red-500 p-4 rounded' },
@@ -414,8 +425,8 @@
                       services.map(s => e('label', { key: s.id, className: 'flex items-center p-3 border-2 border-amber-200 rounded-lg cursor-pointer hover:bg-amber-50' },
                         e('input', { type: 'checkbox', checked: bookingForm.services.includes(s.id), onChange: () => handleServiceToggle(s.id), className: 'w-4 h-4' }),
                         e('div', { className: 'ml-3 flex-1' },
-                          e('p', { className: 'font-semibold text-amber-900' }, s.name),
-                          e('p', { className: 'text-sm text-gray-600' }, s.duration + ' min • ' + s.price + '€')
+                          e('p', { className: 'font-semibold text-amber-900 text-sm' }, s.name),
+                          e('p', { className: 'text-xs text-gray-600' }, s.duration + ' min • ' + s.price + '€')
                         )
                       ))
                     )
@@ -427,9 +438,9 @@
                       addOns.map(a => e('label', { key: a.id, className: 'flex items-center p-3 border-2 border-amber-200 rounded-lg cursor-pointer hover:bg-amber-50' },
                         e('input', { type: 'checkbox', checked: bookingForm.addOns.includes(a.id), onChange: () => handleAddOnToggle(a.id), className: 'w-4 h-4' }),
                         e('div', { className: 'ml-3 flex-1' },
-                          e('p', { className: 'font-semibold text-amber-900' }, a.name)
+                          e('p', { className: 'font-semibold text-amber-900 text-sm' }, a.name)
                         ),
-                        e('span', { className: 'text-pink-600 font-bold' }, '+' + a.price + '€')
+                        e('span', { className: 'text-pink-600 font-bold text-sm' }, '+' + a.price + '€')
                       ))
                     )
                   ),
@@ -445,7 +456,7 @@
                           key: slot,
                           type: 'button',
                           onClick: () => setBookingForm({...bookingForm, bookingTime: slot}),
-                          className: 'px-3 py-2 rounded ' + (bookingForm.bookingTime === slot ? 'bg-pink-400 text-white font-bold' : 'bg-amber-100 text-amber-900 hover:bg-amber-200')
+                          className: 'px-3 py-2 rounded text-sm ' + (bookingForm.bookingTime === slot ? 'bg-pink-400 text-white font-bold' : 'bg-amber-100 text-amber-900 hover:bg-amber-200')
                         }, slot))
                       )
                     )
@@ -453,7 +464,7 @@
 
                   e('div', { className: 'pb-6' },
                     e('h3', { className: 'font-bold text-amber-900 mb-4' }, 'Message (Optional)'),
-                    e('textarea', { placeholder: 'Special requests...', value: bookingForm.message, onChange: evt => setBookingForm({...bookingForm, message: evt.target.value}), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg h-20' })
+                    e('textarea', { placeholder: 'Special requests...', value: bookingForm.message, onChange: evt => setBookingForm({...bookingForm, message: evt.target.value}), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg h-20 text-sm' })
                   ),
 
                   e('div', { className: 'bg-gradient-to-r from-amber-100 to-pink-100 p-4 rounded-lg border-2 border-amber-300 mb-6' },
@@ -473,6 +484,52 @@
         showConfirmModal && renderConfirmModal()
       );
 
+      const renderSearchPage = () => e('div', { className: 'min-h-screen bg-gray-100' },
+        e('header', { className: 'bg-white shadow-lg border-b-4 border-blue-400' },
+          e('div', { className: 'max-w-4xl mx-auto px-4 py-4 flex items-center justify-between' },
+            e('h1', { className: 'text-2xl font-bold text-amber-900' }, 'Search Your Booking'),
+            e('button', { onClick: () => setCurrentPage('booking'), className: 'px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400' }, 'Back')
+          )
+        ),
+
+        e('div', { className: 'max-w-4xl mx-auto p-4' },
+          e('div', { className: 'bg-white rounded-lg shadow p-6 mb-6' },
+            e('h3', { className: 'font-bold text-lg text-amber-900 mb-4' }, 'Find Your Appointment'),
+            e('div', { className: 'space-y-3' },
+              e('input', { type: 'text', placeholder: 'Enter Booking Code (e.g., ABC123)', value: adminFilter.searchCode, onChange: evt => setAdminFilter({...adminFilter, searchCode: evt.target.value}), className: 'w-full px-4 py-2 border-2 border-blue-200 rounded-lg' }),
+              e('p', { className: 'text-sm text-gray-600' }, 'OR'),
+              e('input', { type: 'email', placeholder: 'Enter Your Email', value: adminFilter.searchEmail, onChange: evt => setAdminFilter({...adminFilter, searchEmail: evt.target.value}), className: 'w-full px-4 py-2 border-2 border-blue-200 rounded-lg' })
+            )
+          ),
+
+          getFilteredBookings().length === 0 ? e('div', { className: 'bg-white rounded-lg shadow p-6 text-center text-gray-600' }, 'No bookings found') :
+          e('div', { className: 'space-y-4' },
+            getFilteredBookings().map(booking => e('div', { key: booking.id, className: 'bg-white rounded-lg shadow' },
+              e('div', { className: 'p-6 border-b-2 border-blue-200' },
+                e('div', { className: 'flex justify-between items-start mb-3' },
+                  e('div', null,
+                    e('p', { className: 'font-bold text-lg text-amber-900' }, booking.customerName),
+                    e('p', { className: 'text-sm bg-blue-100 text-blue-900 font-bold inline-block px-3 py-1 rounded' }, 'Code: ' + booking.code)
+                  ),
+                  e('span', { className: 'px-3 py-1 rounded text-xs font-semibold bg-green-100 text-green-800' }, booking.status)
+                ),
+                e('div', { className: 'grid grid-cols-2 gap-4 text-sm' },
+                  e('div', null, e('p', { className: 'text-gray-600 font-semibold' }, 'Date & Time:'), e('p', { className: 'text-amber-900' }, new Date(booking.bookingDate).toLocaleDateString('de-DE') + ' ' + booking.bookingTime)),
+                  e('div', null, e('p', { className: 'text-gray-600 font-semibold' }, 'Price:'), e('p', { className: 'text-pink-600 font-bold' }, booking.totalPrice + '€')),
+                  e('div', null, e('p', { className: 'text-gray-600 font-semibold' }, 'Duration:'), e('p', { className: 'text-amber-900' }, booking.duration + ' min')),
+                  e('div', null, e('p', { className: 'text-gray-600 font-semibold' }, 'Email:'), e('p', { className: 'text-amber-900 text-xs' }, booking.customerEmail))
+                ),
+                booking.message && e('div', { className: 'mt-3 p-2 bg-amber-50 rounded' }, e('p', { className: 'text-xs font-semibold text-gray-600' }, 'Note: '), e('p', { className: 'text-xs text-amber-900' }, booking.message)),
+                e('div', { className: 'flex gap-2 mt-4' },
+                  e('a', { href: `mailto:${booking.customerEmail}`, className: 'px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600' }, 'Email'),
+                  e('a', { href: `https://wa.me/${booking.customerPhone.replace(/[^0-9]/g, '')}`, target: '_blank', className: 'px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700' }, 'WhatsApp')
+                )
+              )
+            ))
+          )
+        )
+      );
+
       const renderAdminPage = () => e('div', { className: 'min-h-screen bg-gray-100' },
         e('header', { className: 'bg-white shadow-lg border-b-4 border-pink-400' },
           e('div', { className: 'max-w-7xl mx-auto px-4 py-4 flex items-center justify-between' },
@@ -487,45 +544,42 @@
         !adminLoggedIn ? e('div', { className: 'max-w-md mx-auto mt-10 bg-white p-8 rounded-lg shadow-lg' },
           showForgotPassword ? e('div', { className: 'space-y-4' },
             resetSent ? e('div', { className: 'text-center' },
-              e('p', { className: 'text-green-600 font-semibold mb-3' }, '✓ Password Reset Sent!'),
-              e('p', { className: 'text-sm text-gray-600' }, 'Check email: nailscape.de@gmail.com')
+              e('p', { className: 'text-green-600 font-semibold mb-3' }, '✓ Password Reset!'),
+              e('p', { className: 'text-sm text-gray-600' }, 'Create a new password on next login')
             ) : e('form', { onSubmit: (evt) => { evt.preventDefault(); handleForgotPassword(); }, className: 'space-y-4' },
-              e('input', { type: 'email', value: forgotPasswordEmail, onChange: evt => setForgotPasswordEmail(evt.target.value), placeholder: 'Email', className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg', required: true }),
-              e('button', { type: 'submit', className: 'w-full bg-blue-500 text-white font-bold py-2 rounded hover:bg-blue-600' }, 'Send Reset Link'),
+              e('p', { className: 'text-sm text-gray-700' }, 'Reset password? Set a new one on next login.'),
+              e('button', { type: 'submit', className: 'w-full bg-blue-500 text-white font-bold py-2 rounded hover:bg-blue-600' }, 'Reset Password'),
               e('button', { type: 'button', onClick: () => setShowForgotPassword(false), className: 'w-full bg-gray-300 text-gray-800 font-bold py-2 rounded' }, 'Back')
             )
           ) : e('div', { className: 'space-y-4' },
-            e('h2', { className: 'text-2xl font-bold text-amber-900 mb-6' }, adminPasswordHash ? 'Admin Login' : 'Set Password'),
+            e('h2', { className: 'text-2xl font-bold text-amber-900 mb-6' }, adminPasswordHash ? 'Admin Login' : 'Create Password'),
+            e('p', { className: 'text-sm text-gray-600 mb-4' }, 'Email: nailscape.de@gmail.com'),
             e('form', { onSubmit: handleAdminLogin, className: 'space-y-4' },
-              e('input', { type: 'email', value: adminEmail, readOnly: true, className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg bg-gray-100', required: true }),
               e('div', { className: 'relative' },
-                e('input', { type: showPassword ? 'text' : 'password', placeholder: 'Password', value: adminPassword, onChange: evt => setAdminPassword(evt.target.value), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg pr-10', required: true }),
-                e('button', { type: 'button', onClick: () => setShowPassword(!showPassword), className: 'absolute right-3 top-2 text-gray-600 font-bold' }, showPassword ? '👁️' : '🔒')
+                e('input', { type: showPassword ? 'text' : 'password', placeholder: 'Password (6+ chars)', value: adminPassword, onChange: evt => setAdminPassword(evt.target.value), className: 'w-full px-4 py-2 border-2 border-amber-200 rounded-lg pr-10', required: true }),
+                e('button', { type: 'button', onClick: () => setShowPassword(!showPassword), className: 'absolute right-3 top-2 text-gray-600 font-bold text-lg' }, showPassword ? '👁️' : '🔒')
               ),
               errorMessage && e('div', { className: 'text-red-600 text-sm font-semibold' }, errorMessage),
-              e('button', { type: 'submit', className: 'w-full bg-pink-400 text-white font-bold py-2 rounded hover:bg-pink-500' }, 'Login'),
-              adminPasswordHash && e('button', { type: 'button', onClick: () => { setShowForgotPassword(true); setErrorMessage(''); }, className: 'w-full text-blue-600 text-sm hover:underline font-semibold' }, 'Forgot Password?')
+              e('button', { type: 'submit', className: 'w-full bg-pink-400 text-white font-bold py-2 rounded hover:bg-pink-500' }, adminPasswordHash ? 'Login' : 'Create Account'),
+              adminPasswordHash && e('button', { type: 'button', onClick: () => { setShowForgotPassword(true); setErrorMessage(''); }, className: 'w-full text-blue-600 text-sm hover:underline font-semibold' }, 'Reset Password?')
             )
           )
         ) : e('div', { className: 'max-w-7xl mx-auto p-4' },
           e('div', { className: 'grid md:grid-cols-3 gap-6' },
             e('div', { className: 'md:col-span-1' },
               e('div', { className: 'bg-white rounded-lg shadow p-4' },
-                e('h3', { className: 'font-bold text-lg text-amber-900 mb-4' }, 'Filters'),
+                e('h3', { className: 'font-bold text-lg text-amber-900 mb-4' }, 'Search Bookings'),
                 e('div', { className: 'space-y-3' },
-                  e('input', { type: 'date', value: adminFilter.dateFrom, onChange: evt => setAdminFilter({...adminFilter, dateFrom: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' }),
-                  e('input', { type: 'date', value: adminFilter.dateTo, onChange: evt => setAdminFilter({...adminFilter, dateTo: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' }),
+                  e('input', { type: 'text', placeholder: 'Booking Code', value: adminFilter.searchCode, onChange: evt => setAdminFilter({...adminFilter, searchCode: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' }),
+                  e('input', { type: 'email', placeholder: 'Email', value: adminFilter.searchEmail, onChange: evt => setAdminFilter({...adminFilter, searchEmail: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' }),
+                  e('input', { type: 'date', value: adminFilter.dateFrom, onChange: evt => setAdminFilter({...adminFilter, dateFrom: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm', placeholder: 'From' }),
+                  e('input', { type: 'date', value: adminFilter.dateTo, onChange: evt => setAdminFilter({...adminFilter, dateTo: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm', placeholder: 'To' }),
                   e('select', { value: adminFilter.status, onChange: evt => setAdminFilter({...adminFilter, status: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' },
                     e('option', { value: 'all' }, 'All Status'),
                     e('option', { value: 'confirmed' }, 'Confirmed'),
                     e('option', { value: 'completed' }, 'Completed'),
                     e('option', { value: 'cancelled' }, 'Cancelled')
-                  ),
-                  e('select', { value: adminFilter.service, onChange: evt => setAdminFilter({...adminFilter, service: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' },
-                    e('option', { value: 'all' }, 'All Services'),
-                    services.map(s => e('option', { key: s.id, value: s.id }, s.name))
-                  ),
-                  e('input', { type: 'text', placeholder: 'Customer Name', value: adminFilter.searchName, onChange: evt => setAdminFilter({...adminFilter, searchName: evt.target.value}), className: 'w-full px-3 py-2 border rounded text-sm' })
+                  )
                 )
               )
             ),
@@ -541,7 +595,8 @@
                     e('div', { className: 'flex justify-between items-start' },
                       e('div', null,
                         e('p', { className: 'font-semibold text-amber-900' }, booking.customerName),
-                        e('p', { className: 'text-sm text-gray-600' }, booking.bookingDate + ' ' + booking.bookingTime),
+                        e('p', { className: 'text-xs bg-blue-100 text-blue-900 font-bold inline-block px-2 py-1 rounded mt-1' }, 'Code: ' + booking.code),
+                        e('p', { className: 'text-sm text-gray-600 mt-1' }, booking.bookingDate + ' ' + booking.bookingTime),
                         e('p', { className: 'text-sm text-pink-600 font-bold' }, booking.totalPrice + '€')
                       ),
                       e('span', { className: 'px-3 py-1 rounded text-xs font-semibold bg-green-100 text-green-800' }, booking.status)
@@ -569,7 +624,9 @@
         )
       );
 
-      return currentPage === 'booking' ? renderBookingPage() : renderAdminPage();
+      if (currentPage === 'booking') return renderBookingPage();
+      if (currentPage === 'search') return renderSearchPage();
+      if (currentPage === 'admin') return renderAdminPage();
     }
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
