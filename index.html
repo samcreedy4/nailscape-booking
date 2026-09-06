@@ -227,23 +227,32 @@
             if (window.emailjs) {
               const servicesList = bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', ');
               const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
+              const dateTime = bookingDate + ' at ' + bookingForm.bookingTime;
               const totalPrice = calculateTotalPrice() + '€';
               
-              console.log('📧 Sending email to:', bookingForm.customerEmail);
-              const emailResponse = await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_CONFIRM, {
+              const templateParams = {
                 client_email: bookingForm.customerEmail,
                 client_name: bookingForm.customerName,
                 booking_code: pendingCode,
                 booking_id: pendingCode,
-                date_time: bookingDate + ' at ' + bookingForm.bookingTime,
+                date_time: dateTime,
                 services: servicesList,
-                duration: calculateTotalDuration(),
+                duration: calculateTotalDuration().toString(),
                 total_price: totalPrice
-              });
-              console.log('✓ Email sent successfully!', emailResponse);
+              };
+
+              console.log('📧 Sending email with params:', templateParams);
+              
+              const response = await window.emailjs.send(
+                EMAILJS_SERVICE_ID,
+                EMAILJS_TEMPLATE_CONFIRM,
+                templateParams
+              );
+              
+              console.log('✓ Email sent successfully!', response.status);
             }
           } catch (emailErr) {
-            console.error('✗ Email send failed:', emailErr);
+            console.error('✗ Email send failed:', emailErr.status, emailErr.text);
           }
 
           setBookings([...bookings, newBooking]);
