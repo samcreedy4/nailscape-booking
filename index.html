@@ -14,27 +14,7 @@
 <body>
   <div id="root"></div>
   
-  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
   <script>
-    // Wait for EmailJS to load, then initialize
-    const emailjsReady = new Promise((resolve) => {
-      if (window.emailjs) {
-        window.emailjs.init('XAY86qC56WaLpvftm');
-        console.log('✓ EmailJS initialized');
-        resolve();
-      } else {
-        setTimeout(() => {
-          if (window.emailjs) {
-            window.emailjs.init('XAY86qC56WaLpvftm');
-            console.log('✓ EmailJS initialized (delayed)');
-          }
-          resolve();
-        }, 1000);
-      }
-    });
-
-    const EMAILJS_SERVICE_ID = 'service_gcau9wx';
-    const EMAILJS_TEMPLATE_CONFIRM = 'template_alws55p';
 
     const e = React.createElement;
     const { useState, useEffect } = React;
@@ -227,39 +207,35 @@
         console.log('✓ Booking saved to localStorage:', newBooking);
         setBookings([...bookings, newBooking]);
 
-        // Send email if EmailJS is available
-        if (window.emailjs) {
-          const servicesList = bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', ');
-          const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
-          const dateTime = bookingDate + ' at ' + bookingForm.bookingTime;
-          const totalPrice = calculateTotalPrice() + '€';
-          
-          console.log('📧 Attempting to send email...');
-          
-          window.emailjs.send(
-            EMAILJS_SERVICE_ID,
-            EMAILJS_TEMPLATE_CONFIRM,
-            {
-              client_email: bookingForm.customerEmail,
-              client_name: bookingForm.customerName,
-              booking_code: pendingCode,
-              booking_id: pendingCode,
-              date_time: dateTime,
-              services: servicesList,
-              duration: String(calculateTotalDuration()),
-              total_price: totalPrice
-            }
-          ).then(
-            function(response) {
-              console.log('✓✓✓ EMAIL SENT SUCCESSFULLY! ✓✓✓', response);
-            },
-            function(error) {
-              console.error('✗ Email send failed:', error);
-            }
-          );
-        } else {
-          console.warn('⚠️ EmailJS not loaded, skipping email');
-        }
+        // Send email via Formspree (simpler than EmailJS)
+        const servicesList = bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', ');
+        const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
+        const dateTime = bookingDate + ' at ' + bookingForm.bookingTime;
+        const totalPrice = calculateTotalPrice() + '€';
+        
+        console.log('📧 Sending email via Formspree...');
+        
+        fetch('https://formspree.io/f/meoqrnlq', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: bookingForm.customerEmail,
+            _replyto: bookingForm.customerEmail,
+            message: `Booking Confirmation - Nailscape\n\nBooking Code: ${pendingCode}\nName: ${bookingForm.customerName}\nDate & Time: ${dateTime}\nServices: ${servicesList}\nDuration: ${calculateTotalDuration()} min\nTotal Price: ${totalPrice}`
+          })
+        })
+        .then(response => {
+          if (response.ok) {
+            console.log('✓✓✓ EMAIL SENT SUCCESSFULLY! ✓✓✓');
+          } else {
+            console.error('✗ Email send failed with status:', response.status);
+          }
+        })
+        .catch(error => {
+          console.error('✗ Email send error:', error);
+        });
 
         // Always close modal and show success - booking was saved
         setTimeout(() => {
