@@ -14,15 +14,20 @@
 <body>
   <div id="root"></div>
   
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/build/index.min.js"></script>
+  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
   <script>
-    // EmailJS Setup
-    if (window.emailjs) {
-      window.emailjs.init('XAY86qC56WaLpvftm');
-      console.log('✓ EmailJS initialized');
-    } else {
-      console.error('✗ EmailJS library failed to load');
+    // Wait for EmailJS to load
+    function initEmailJS() {
+      if (window.emailjs) {
+        window.emailjs.init('XAY86qC56WaLpvftm');
+        console.log('✓ EmailJS initialized');
+      } else {
+        console.error('✗ EmailJS library failed to load');
+      }
     }
+    
+    // Initialize after a brief delay to ensure script loads
+    setTimeout(initEmailJS, 500);
 
     const EMAILJS_SERVICE_ID = 'service_gcau9wx';
     const EMAILJS_TEMPLATE_CONFIRM = 'template_alws55p';
