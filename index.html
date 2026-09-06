@@ -207,30 +207,34 @@
         console.log('✓ Booking saved to localStorage:', newBooking);
         setBookings([...bookings, newBooking]);
 
-        // Send email via Formspree (simpler than EmailJS)
+        // Send email via Web3Forms (no setup needed)
         const servicesList = bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', ');
         const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
         const dateTime = bookingDate + ' at ' + bookingForm.bookingTime;
         const totalPrice = calculateTotalPrice() + '€';
         
-        console.log('📧 Sending email via Formspree...');
+        console.log('📧 Sending email via Web3Forms...');
         
-        fetch('https://formspree.io/f/meoqrnlq', {
+        fetch('https://api.web3forms.com/submit', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            email: bookingForm.customerEmail,
-            _replyto: bookingForm.customerEmail,
-            message: `Booking Confirmation - Nailscape\n\nBooking Code: ${pendingCode}\nName: ${bookingForm.customerName}\nDate & Time: ${dateTime}\nServices: ${servicesList}\nDuration: ${calculateTotalDuration()} min\nTotal Price: ${totalPrice}`
+            access_key: '4d6e2a8e-45a6-44b1-b0ba-a6a74b6c0e1f',
+            email: 'nailscape.de@gmail.com',
+            subject: `Booking Confirmed! ID: ${pendingCode}`,
+            from_name: bookingForm.customerName,
+            reply_to: bookingForm.customerEmail,
+            message: `New Booking Received\n\nCustomer: ${bookingForm.customerName}\nEmail: ${bookingForm.customerEmail}\nPhone: ${bookingForm.customerPhone}\n\nBooking Code: ${pendingCode}\nDate & Time: ${dateTime}\nServices: ${servicesList}\nDuration: ${calculateTotalDuration()} minutes\nTotal Price: ${totalPrice}`
           })
         })
-        .then(response => {
-          if (response.ok) {
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
             console.log('✓✓✓ EMAIL SENT SUCCESSFULLY! ✓✓✓');
           } else {
-            console.error('✗ Email send failed with status:', response.status);
+            console.error('✗ Email send failed:', data);
           }
         })
         .catch(error => {
