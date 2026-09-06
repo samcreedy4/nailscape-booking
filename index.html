@@ -207,38 +207,39 @@
         console.log('✓ Booking saved to localStorage:', newBooking);
         setBookings([...bookings, newBooking]);
 
-        // Send email via Web3Forms (no setup needed)
+        // Send booking notification to Slack
         const servicesList = bookingForm.services.map(s => services.find(svc => svc.id === s)?.name).join(', ');
         const bookingDate = new Date(bookingForm.bookingDate).toLocaleDateString('de-DE');
         const dateTime = bookingDate + ' at ' + bookingForm.bookingTime;
         const totalPrice = calculateTotalPrice() + '€';
         
-        console.log('📧 Sending email via Web3Forms...');
+        console.log('📧 Sending booking notification to Slack...');
         
-        fetch('https://api.web3forms.com/submit', {
+        fetch('https://hooks.slack.com/services/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', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            access_key: '4d6e2a8e-45a6-44b1-b0ba-a6a74b6c0e1f',
-            email: 'nailscape.de@gmail.com',
-            subject: `Booking Confirmed! ID: ${pendingCode}`,
-            from_name: bookingForm.customerName,
-            reply_to: bookingForm.customerEmail,
-            message: `New Booking Received\n\nCustomer: ${bookingForm.customerName}\nEmail: ${bookingForm.customerEmail}\nPhone: ${bookingForm.customerPhone}\n\nBooking Code: ${pendingCode}\nDate & Time: ${dateTime}\nServices: ${servicesList}\nDuration: ${calculateTotalDuration()} minutes\nTotal Price: ${totalPrice}`
+            text: `🎉 New Booking!`,
+            blocks: [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `*New Booking Confirmed* ✓\n\n*Code:* ${pendingCode}\n*Customer:* ${bookingForm.customerName}\n*Email:* ${bookingForm.customerEmail}\n*Phone:* ${bookingForm.customerPhone}\n*Date/Time:* ${dateTime}\n*Services:* ${servicesList}\n*Duration:* ${calculateTotalDuration()} min\n*Total:* ${totalPrice}`
+                }
+              }
+            ]
           })
         })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            console.log('✓✓✓ EMAIL SENT SUCCESSFULLY! ✓✓✓');
-          } else {
-            console.error('✗ Email send failed:', data);
+        .then(response => {
+          if (response.ok) {
+            console.log('✓✓✓ SLACK NOTIFICATION SENT! ✓✓✓');
           }
         })
         .catch(error => {
-          console.error('✗ Email send error:', error);
+          console.error('✗ Slack notification error:', error);
         });
 
         // Always close modal and show success - booking was saved
